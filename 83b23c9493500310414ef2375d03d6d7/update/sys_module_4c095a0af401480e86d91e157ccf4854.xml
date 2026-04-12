@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_module">
+    <sys_module action="INSERT_OR_UPDATE">
+        <content><![CDATA[import { gs } from '@servicenow/glide'
+
+export function generateJobNumber(current, previous) {
+    // Check if job_number is already set
+    if (current.getValue('job_number')) {
+        return;
+    }
+    
+    // Query the Jobs table to find the highest existing job number
+    const gr = new GlideRecord('x_1964226_svem_com_jobs');
+    gr.orderByDesc('job_number');
+    gr.setLimit(1);
+    gr.query();
+    
+    let nextNumber = 1;
+    
+    if (gr.next()) {
+        const lastJobNumber = gr.getValue('job_number');
+        if (lastJobNumber && lastJobNumber.startsWith('SVEM-J')) {
+            const numberPart = lastJobNumber.substring(6); // Remove 'SVEM-J'
+            const lastNumber = parseInt(numberPart, 10);
+            if (!isNaN(lastNumber)) {
+                nextNumber = lastNumber + 1;
+            }
+        }
+    }
+    
+    // Format as 5-digit padded number
+    const paddedNumber = String(nextNumber).padStart(5, '0');
+    current.setValue('job_number', `SVEM-J${paddedNumber}`);
+}
+
+export function generateEmployeeId(current, previous) {
+    // Check if employee_id is already set
+    if (current.getValue('employee_id')) {
+        return;
+    }
+    
+    // Query the Staff table to find the highest existing employee ID
+    const gr = new GlideRecord('x_1964226_svem_com_staff');
+    gr.orderByDesc('employee_id');
+    gr.setLimit(1);
+    gr.query();
+    
+    let nextNumber = 1;
+    
+    if (gr.next()) {
+        const lastEmployeeId = gr.getValue('employee_id');
+        if (lastEmployeeId && lastEmployeeId.startsWith('SVEM-E')) {
+            const numberPart = lastEmployeeId.substring(6); // Remove 'SVEM-E'
+            const lastNumber = parseInt(numberPart, 10);
+            if (!isNaN(lastNumber)) {
+                nextNumber = lastNumber + 1;
+            }
+        }
+    }
+    
+    // Format as 4-digit padded number
+    const paddedNumber = String(nextNumber).padStart(4, '0');
+    current.setValue('employee_id', `SVEM-E${paddedNumber}`);
+}
+
+export function generateOperationId(current, previous) {
+    // Check if op_id is already set
+    if (current.getValue('op_id')) {
+        return;
+    }
+    
+    const jobId = current.getValue('job');
+    const sequence = current.getValue('sequence');
+    
+    if (jobId) {
+        // Get the job number from the job record
+        const jobGR = new GlideRecord('x_1964226_svem_com_jobs');
+        if (jobGR.get(jobId)) {
+            const jobNumber = jobGR.getValue('job_number');
+            if (jobNumber && sequence) {
+                // Format sequence as 2-digit number (OP10, OP20, etc.)
+                const paddedSequence = String(sequence).padStart(2, '0');
+                current.setValue('op_id', `${jobNumber}-OP${paddedSequence}`);
+            }
+        }
+    }
+}
+
+export function generateDeliveryId(current, previous) {
+    // Check if delivery_id is already set
+    if (current.getValue('delivery_id')) {
+        return;
+    }
+    
+    const jobId = current.getValue('job');
+    const poLine = current.getValue('po_line');
+    
+    if (jobId) {
+        // Get the job number from the job record
+        const jobGR = new GlideRecord('x_1964226_svem_com_jobs');
+        if (jobGR.get(jobId)) {
+            const jobNumber = jobGR.getValue('job_number');
+            if (jobNumber) {
+                // Use PO line or default to '01' if not provided
+                const lineNumber = poLine || '01';
+                const paddedLine = String(lineNumber).padStart(2, '0');
+                current.setValue('delivery_id', `${jobNumber}-D${paddedLine}`);
+            }
+        }
+    }
+}]]></content>
+        <external_source>false</external_source>
+        <path>x_1964226_svem_com/x-1964226-svem-command/1.0.0/src/server/id-generators.js</path>
+        <sys_class_name>sys_module</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-12 23:09:36</sys_created_on>
+        <sys_id>4c095a0af401480e86d91e157ccf4854</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_1964226_svem_com/x-1964226-svem-command/1.0.0/src/server/id-generators.js</sys_name>
+        <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+        <sys_update_name>sys_module_4c095a0af401480e86d91e157ccf4854</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-12 23:09:36</sys_updated_on>
+    </sys_module>
+</record_update>

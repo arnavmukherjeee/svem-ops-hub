@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element db_object_id="04b43c9893500310414ef2375d03d665" label="Staff" max_length="40" name="x_1964226_svem_com_staff" type="collection">
+        <element choice="1" label="Role" max_length="40" name="role" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Programmer" sequence="0" value="programmer"/>
+                <element inactive_on_update="false" label="Deburr Operator" sequence="4" value="deburr_operator"/>
+                <element inactive_on_update="false" label="Operator" sequence="1" value="operator"/>
+                <element inactive_on_update="false" label="Material Handler" sequence="5" value="material_handler"/>
+                <element inactive_on_update="false" label="Setup Operator" sequence="2" value="setup_operator"/>
+                <element inactive_on_update="false" label="Driver" sequence="6" value="driver"/>
+                <element inactive_on_update="false" label="QC Technician" sequence="3" value="qc_technician"/>
+                <element inactive_on_update="false" label="Shipping Technician" sequence="7" value="shipping_technician"/>
+            </choice>
+        </element>
+        <element choice="1" default="day" label="Shift" max_length="40" name="shift" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Day" sequence="0" value="day"/>
+                <element inactive_on_update="false" label="Swing" sequence="1" value="swing"/>
+                <element inactive_on_update="false" label="Night" sequence="2" value="night"/>
+            </choice>
+        </element>
+        <element attributes="encode_utf8=false" label="Current Job" max_length="32" name="current_job" reference="x_1964226_svem_com_jobs" type="reference"/>
+        <element choice="1" default="available" label="Status" max_length="40" name="status" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Off" sequence="2" value="off"/>
+                <element inactive_on_update="false" label="Available" sequence="0" value="available"/>
+                <element inactive_on_update="false" label="Assigned" sequence="1" value="assigned"/>
+            </choice>
+        </element>
+        <element attributes="edge_encryption_enabled=true" label="Notes" max_length="4000" name="notes" type="string"/>
+        <element attributes="encode_utf8=false" label="Current Machine" max_length="32" name="current_machine" reference="x_1964226_svem_com_machines" type="reference"/>
+        <element attributes="encode_utf8=false" label="Current Operation" max_length="32" name="current_operation" reference="x_1964226_svem_com_operations" type="reference"/>
+        <element function_definition="glidefunction:count_completed_jobs_this_week" function_field="true" label="Jobs This Week" max_length="40" name="jobs_completed_this_week" read_only="true" type="integer"/>
+        <element attributes="edge_encryption_enabled=true" label="Employee ID" max_length="20" name="employee_id" read_only="true" type="string"/>
+        <element attributes="edge_encryption_enabled=true" display="true" label="Name" mandatory="true" max_length="100" name="name" type="string"/>
+        <index name="index">
+            <element name="current_operation"/>
+        </index>
+        <index name="index2">
+            <element name="current_job"/>
+        </index>
+        <index name="index3">
+            <element name="current_machine"/>
+        </index>
+    </element>
+</database>

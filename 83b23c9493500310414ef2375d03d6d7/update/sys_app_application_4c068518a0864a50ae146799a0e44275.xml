@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_app_application">
+    <sys_app_application action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <category display_value="svem_manufacturing">6953d0106fd74868b2e225e190cbf3bc</category>
+        <description>Real-time visibility into jobs, machines, operations, staffing, and shipping for Silicon Valley Elite Manufacturing</description>
+        <device_type>browser</device_type>
+        <hint>Manufacturing shop floor management system</hint>
+        <name/>
+        <order>100</order>
+        <roles/>
+        <sys_class_name>sys_app_application</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-12 21:56:44</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>4c068518a0864a50ae146799a0e44275</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>SVEM Command Center</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+        <sys_update_name>sys_app_application_4c068518a0864a50ae146799a0e44275</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-12 21:56:44</sys_updated_on>
+        <title>SVEM Command Center</title>
+        <view_name/>
+    </sys_app_application>
+</record_update>

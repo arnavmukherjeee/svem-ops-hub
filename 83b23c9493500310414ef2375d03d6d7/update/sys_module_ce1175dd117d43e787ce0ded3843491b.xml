@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_module">
+    <sys_module action="INSERT_OR_UPDATE">
+        <content><![CDATA[{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "serialNumber": "urn:uuid:f687ee6d-24a5-4b3f-a190-784129589ad4",
+  "metadata": {
+    "timestamp": "2026-04-12T23:29:31.413Z",
+    "tools": {
+      "components": [
+        {
+          "type": "library",
+          "name": "sdk-build-plugins",
+          "group": "@servicenow",
+          "version": "4.5.0",
+          "author": "ServiceNow"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "name": "x-1964226-svem-command",
+      "version": "1.0.0",
+      "bom-ref": "pkg:servicenow/x-1964226-svem-command@1.0.0?sys_scope_id=83b23c9493500310414ef2375d03d6d7",
+      "description": "[BUILD AGENT GENERATED]:  Real-time manufacturing shop floor management app for Silicon Valley Elite Manufacturing, providing visibility into jobs, machine assignments, operations routing, staffing, and shipping status for a machine shop with 14 vertical mills, 2 lathes, and 16+ staff.",
+      "licenses": [
+        {
+          "license": {
+            "name": "UNLICENSED"
+          }
+        }
+      ],
+      "purl": "pkg:servicenow/x-1964226-svem-command@1.0.0?sys_scope_id=83b23c9493500310414ef2375d03d6d7"
+    }
+  },
+  "components": [],
+  "dependencies": [
+    {
+      "ref": "pkg:servicenow/x-1964226-svem-command@1.0.0?sys_scope_id=83b23c9493500310414ef2375d03d6d7"
+    }
+  ]
+}]]></content>
+        <external_source>false</external_source>
+        <path>x_1964226_svem_com/x-1964226-svem-command/1.0.0/bom.json</path>
+        <sys_class_name>sys_module</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-12 21:56:45</sys_created_on>
+        <sys_id>ce1175dd117d43e787ce0ded3843491b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_1964226_svem_com/x-1964226-svem-command/1.0.0/bom.json</sys_name>
+        <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+        <sys_update_name>sys_module_ce1175dd117d43e787ce0ded3843491b</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-12 21:56:45</sys_updated_on>
+    </sys_module>
+</record_update>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_module">
+    <sys_module action="INSERT_OR_UPDATE">
+        <content><![CDATA[{
+  "name": "x-1964226-svem-command",
+  "version": "1.0.0",
+  "description": "[BUILD AGENT GENERATED]:  Real-time manufacturing shop floor management app for Silicon Valley Elite Manufacturing, providing visibility into jobs, machine assignments, operations routing, staffing, and shipping status for a machine shop with 14 vertical mills, 2 lathes, and 16+ staff.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "now-sdk build",
+    "deploy": "now-sdk install",
+    "transform": "now-sdk transform",
+    "types": "now-sdk dependencies"
+  },
+  "devDependencies": {
+    "@servicenow/sdk": "4.5.0",
+    "@servicenow/glide": "26.0.1",
+    "eslint": "8.50.0",
+    "@servicenow/eslint-plugin-sdk-app-plugin": "4.5.0"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  }
+}]]></content>
+        <external_source>false</external_source>
+        <path>x_1964226_svem_com/x-1964226-svem-command/1.0.0/package.json</path>
+        <sys_class_name>sys_module</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-12 21:56:45</sys_created_on>
+        <sys_id>25d26983b828413f9c32101ed61f2f39</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_1964226_svem_com/x-1964226-svem-command/1.0.0/package.json</sys_name>
+        <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+        <sys_update_name>sys_module_25d26983b828413f9c32101ed61f2f39</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-12 21:56:45</sys_updated_on>
+    </sys_module>
+</record_update>
