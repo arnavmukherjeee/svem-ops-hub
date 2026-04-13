@@ -4,7 +4,7 @@
         <can_delegate>true</can_delegate>
         <description>Machine operator role with limited read access and ability to update operations assigned to them</description>
         <elevated_privilege>false</elevated_privilege>
-        <federated_id/>
+        <federated_id>5Uy5pK/39ob8EDOUFrInTqunTS83NhRRWEu8uo4teBg=</federated_id>
         <grantable>true</grantable>
         <includes_roles/>
         <name>x_1964226_svem_com.operator</name>
