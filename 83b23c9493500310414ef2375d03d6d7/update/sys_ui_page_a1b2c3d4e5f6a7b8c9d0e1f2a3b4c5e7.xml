@@ -3,7 +3,7 @@
         <category>general</category>
         <client_script><![CDATA[
 // ============================================
-// SVEM EMPLOYEE PORTAL - Application Logic
+// SVEM EMPLOYEE PORTAL v2 - Role-Based System
 // ============================================
 
 var API_BASE = '/api/now/table';
@@ -14,9 +14,13 @@ var HEADERS = {
 };
 
 // State
-var currentUser = null;
+var isManager = window._svemIsAdmin === 'true';
+var currentUserName = window._svemUserName || 'admin';
+var currentUserFullName = window._svemFullName || '';
 var staffRecord = null;
+var allStaff = [];
 var myOperations = [];
+var allOperations = [];
 var allMachines = [];
 var allJobs = [];
 var activeTimer = null;
@@ -27,18 +31,51 @@ var selectedMachineStatus = null;
 var clockedIn = false;
 
 // ---- INIT ----
-window.onload = function() { portalInit(); };
+window.onload = function() {
+    setupRoleUI();
+    portalInit();
+};
+
+function setupRoleUI() {
+    // Show/hide tabs based on role
+    var mgrTabs = document.querySelectorAll('.mgr-only');
+    var empTabs = document.querySelectorAll('.emp-only');
+    for (var i = 0; i < mgrTabs.length; i++) {
+        mgrTabs[i].style.display = isManager ? '' : 'none';
+    }
+    // Update tab grid columns
+    var bottomTabs = document.getElementById('bottomTabs');
+    if (isManager) {
+        bottomTabs.style.gridTemplateColumns = 'repeat(6, 1fr)';
+    } else {
+        bottomTabs.style.gridTemplateColumns = 'repeat(4, 1fr)';
+    }
+    // Update role badge in header
+    var roleBadge = document.getElementById('roleBadge');
+    if (roleBadge) {
+        roleBadge.innerHTML = isManager ? 'MANAGER' : 'EMPLOYEE';
+        roleBadge.className = 'role-badge ' + (isManager ? 'manager' : 'employee');
+    }
+}
 
 function portalInit() {
-    loadCurrentUser().then(function() {
-        return Promise.all([loadMyOperations(), loadMachines(), loadJobs()]);
+    loadAllStaff().then(function() {
+        return Promise.all([loadAllOperations(), loadMachines(), loadJobs()]);
     }).then(function() {
+        // Filter my operations
+        filterMyOperations();
         renderTasks();
         renderMachines();
         renderTimeLog();
         renderProfile();
+        if (isManager) {
+            renderTeam();
+            renderAssignments();
+            renderReview();
+        }
     }).catch(function(e) {
         console.error('Init error:', e);
+        showToast('Error loading data: ' + e.message, 'error');
     });
 }
 
@@ -67,63 +104,65 @@ function apiPatch(table, sysId, data) {
     }).then(function(data) { return data.result; });
 }
 
-function extractVal(field) {
+function apiPost(table, data) {
+    return fetch(API_BASE + '/' + table, {
+        method: 'POST', headers: HEADERS, body: JSON.stringify(data)
+    }).then(function(res) {
+        if (!res.ok) throw new Error('API error: ' + res.status);
+        return res.json();
+    }).then(function(data) { return data.result; });
+}
+
+function ev(field) {
     if (!field) return '';
     if (typeof field === 'object') return field.display_value || field.value || '';
     return field;
 }
 
-function extractSysId(field) {
+function eid(field) {
     if (!field) return '';
     if (typeof field === 'object') return field.value || '';
     return field;
 }
 
 // ---- LOAD DATA ----
-function loadCurrentUser() {
-    var userName = window._svemUserName || 'admin';
-
-    return apiGet('sys_user', {
-        sysparm_query: 'user_name=' + userName,
+function loadAllStaff() {
+    return apiGet('x_1964226_svem_com_staff', {
         sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,name,user_name,title',
-        sysparm_limit: '1'
-    }).then(function(users) {
-        currentUser = users[0] || null;
-        return apiGet('x_1964226_svem_com_staff', {
-            sysparm_display_value: 'all',
-            sysparm_fields: 'sys_id,name,employee_id,role,shift,status,current_job,current_machine,current_operation,jobs_completed_this_week',
-            sysparm_limit: '100'
-        });
+        sysparm_fields: 'sys_id,name,employee_id,role,shift,status,current_job,current_machine,current_operation,jobs_completed_this_week,notes',
+        sysparm_limit: '200'
     }).then(function(staff) {
-        var uName = currentUser ? extractVal(currentUser.name) : '';
+        allStaff = staff;
+        // Find current user's staff record
         staffRecord = null;
         for (var i = 0; i < staff.length; i++) {
-            if (extractVal(staff[i].name) === uName) { staffRecord = staff[i]; break; }
+            if (ev(staff[i].name) === currentUserFullName) { staffRecord = staff[i]; break; }
         }
         if (!staffRecord && staff.length > 0) staffRecord = staff[0];
 
-        var name = staffRecord ? extractVal(staffRecord.name) : uName;
+        // Update header
+        var name = staffRecord ? ev(staffRecord.name) : currentUserFullName;
         document.getElementById('userName').innerHTML = escHtml(name || 'Employee');
         document.getElementById('userAvatar').innerHTML = name ? name.charAt(0).toUpperCase() : '?';
-        var role = staffRecord ? extractVal(staffRecord.role) : '';
-        document.getElementById('userRole').innerHTML = role ? formatRole(role) + ' &bull; SVEM' : 'SVEM Employee Portal';
+        var role = staffRecord ? ev(staffRecord.role) : '';
+        document.getElementById('userRole').innerHTML = role ? formatRole(role) : (isManager ? 'Manager' : 'Employee');
 
+        // Clock status
         if (staffRecord) {
-            var status = extractVal(staffRecord.status);
+            var status = ev(staffRecord.status);
             clockedIn = (status === 'available' || status === 'assigned');
             updateClockBtn();
         }
     });
 }
 
-function loadMyOperations() {
+function loadAllOperations() {
     return apiGet('x_1964226_svem_com_operations', {
         sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,job,sequence,work_center,description,op_status,preferred_machine,completed_by,started_date,completed_date,estimated_hours,actual_hours,process_name',
-        sysparm_query: 'op_status!=complete^ORDERBYsequence',
-        sysparm_limit: '50'
-    }).then(function(ops) { myOperations = ops; });
+        sysparm_fields: 'sys_id,job,sequence,work_center,description,op_status,preferred_machine,completed_by,started_date,completed_date,estimated_hours,actual_hours,process_name,notes',
+        sysparm_query: 'ORDERBYsequence',
+        sysparm_limit: '500'
+    }).then(function(ops) { allOperations = ops; });
 }
 
 function loadMachines() {
@@ -137,33 +176,55 @@ function loadMachines() {
 function loadJobs() {
     return apiGet('x_1964226_svem_com_jobs', {
         sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,job_number,po_number,customer,job_status,priority,percent_complete,customer_due_date,quantity_due,assigned_machine',
+        sysparm_fields: 'sys_id,job_number,po_number,customer,job_status,priority,percent_complete,customer_due_date,quantity_due',
         sysparm_limit: '100'
     }).then(function(j) { allJobs = j; });
 }
 
-// ---- RENDER: TASKS ----
+function filterMyOperations() {
+    if (!staffRecord) { myOperations = allOperations; return; }
+    var myName = ev(staffRecord.name);
+    var mySysId = eid(staffRecord.sys_id);
+    myOperations = [];
+    for (var i = 0; i < allOperations.length; i++) {
+        var assignee = ev(allOperations[i].completed_by);
+        // Show ops assigned to me, or unassigned ops if employee
+        if (assignee === myName || eid(allOperations[i].completed_by) === mySysId) {
+            myOperations.push(allOperations[i]);
+        }
+    }
+    // If no specific assignments, show all non-complete for employees
+    if (myOperations.length === 0 && !isManager) {
+        for (var j = 0; j < allOperations.length; j++) {
+            if (ev(allOperations[j].op_status) !== 'complete') {
+                myOperations.push(allOperations[j]);
+            }
+        }
+    }
+}
+
+// ---- RENDER: MY TASKS (Employee) ----
 function renderTasks() {
     var container = document.getElementById('myOperations');
     var activeArea = document.getElementById('activeTaskArea');
 
     var activeOp = null;
     for (var i = 0; i < myOperations.length; i++) {
-        if (extractVal(myOperations[i].op_status) === 'in_progress') { activeOp = myOperations[i]; break; }
+        if (ev(myOperations[i].op_status) === 'in_progress') { activeOp = myOperations[i]; break; }
     }
 
     if (activeOp) {
-        var jobName = extractVal(activeOp.job);
-        var wc = extractVal(activeOp.work_center) || extractVal(activeOp.process_name);
-        var opSysId = extractSysId(activeOp.sys_id);
+        var jobName = ev(activeOp.job);
+        var wc = ev(activeOp.work_center) || ev(activeOp.process_name);
+        var opSysId = eid(activeOp.sys_id);
         activeArea.innerHTML = '<div class="active-task">' +
             '<div class="active-task-label">&#9654; Currently Working On</div>' +
             '<div class="active-task-job">' + escHtml(jobName) + '</div>' +
-            '<div class="active-task-op">Step ' + extractVal(activeOp.sequence) + ' &bull; ' + escHtml(wc).toUpperCase() + '</div>' +
+            '<div class="active-task-op">Step ' + ev(activeOp.sequence) + ' &bull; ' + escHtml(wc).toUpperCase() + '</div>' +
             '<div class="active-task-timer" id="taskTimer">00:00:00</div>' +
             '<div class="active-task-actions">' +
                 '<button class="action-btn warning" onclick="pauseOperation(\'' + opSysId + '\')">&#10074;&#10074; Pause</button>' +
-                '<button class="action-btn success" onclick="completeOperation(\'' + opSysId + '\')">&#10003; Complete</button>' +
+                '<button class="action-btn primary" onclick="submitForReview(\'' + opSysId + '\')">&#10148; Submit for Review</button>' +
             '</div>' +
         '</div>';
         startTimer();
@@ -172,33 +233,263 @@ function renderTasks() {
         stopTimer();
     }
 
-    var pending = [];
+    // Group by status for staged view
+    var staged = { assigned: [], queued: [], on_hold: [], pending_review: [] };
     for (var j = 0; j < myOperations.length; j++) {
-        if (extractVal(myOperations[j].op_status) !== 'in_progress') pending.push(myOperations[j]);
+        var st = ev(myOperations[j].op_status);
+        if (st === 'in_progress') continue;
+        if (st === 'complete') continue;
+        if (staged[st]) staged[st].push(myOperations[j]);
+        else if (st === 'pending_review') staged.pending_review.push(myOperations[j]);
+        else staged.queued.push(myOperations[j]);
     }
 
-    if (pending.length === 0 && !activeOp) {
-        container.innerHTML = '<div class="empty-state"><p>No pending operations assigned to you.</p></div>';
+    var html = '';
+
+    // Pending review
+    if (staged.pending_review.length > 0) {
+        html += '<div class="stage-label review">&#9201; Pending Manager Review (' + staged.pending_review.length + ')</div>';
+        html += renderOpList(staged.pending_review, false);
+    }
+
+    // On hold / rejected
+    if (staged.on_hold.length > 0) {
+        html += '<div class="stage-label hold">&#9888; On Hold / Needs Attention (' + staged.on_hold.length + ')</div>';
+        html += renderOpList(staged.on_hold, true);
+    }
+
+    // Assigned to me
+    if (staged.assigned.length > 0) {
+        html += '<div class="stage-label assigned">&#128204; Assigned to You (' + staged.assigned.length + ')</div>';
+        html += renderOpList(staged.assigned, true);
+    }
+
+    // Queued
+    if (staged.queued.length > 0) {
+        html += '<div class="stage-label queued">&#128203; Queued (' + staged.queued.length + ')</div>';
+        html += renderOpList(staged.queued, true);
+    }
+
+    if (html === '' && !activeOp) {
+        html = '<div class="empty-state"><p>No pending operations.</p></div>';
+    }
+
+    container.innerHTML = html;
+}
+
+function renderOpList(ops, canStart) {
+    var html = '';
+    for (var i = 0; i < ops.length; i++) {
+        var op = ops[i];
+        var status = ev(op.op_status) || 'queued';
+        var jn = ev(op.job);
+        var wcn = ev(op.work_center) || ev(op.process_name) || '--';
+        var estH = ev(op.estimated_hours);
+        var sid = eid(op.sys_id);
+        var assignee = ev(op.completed_by);
+
+        html += '<div class="op-item" onclick="' + (canStart ? 'showOperationActions(\'' + sid + '\')' : 'openJobDetail2(\'' + sid + '\')') + '">' +
+            '<div class="op-seq">' + ev(op.sequence) + '</div>' +
+            '<div class="op-info">' +
+                '<div class="op-name">' + escHtml(wcn).toUpperCase() + '</div>' +
+                '<div class="op-meta"><span>' + escHtml(jn) + '</span>' +
+                (estH ? '<span>' + estH + 'h</span>' : '') +
+                (assignee ? '<span>&#128100; ' + escHtml(assignee) + '</span>' : '') +
+                '</div>' +
+            '</div>' +
+            '<span class="badge ' + status + '">' + status.replace(/_/g, ' ') + '</span>' +
+        '</div>';
+    }
+    return html;
+}
+
+// ---- RENDER: TEAM (Manager Only) ----
+function renderTeam() {
+    var container = document.getElementById('teamList');
+    if (!container) return;
+
+    var activeCount = 0;
+    for (var i = 0; i < allStaff.length; i++) {
+        var s = ev(allStaff[i].status);
+        if (s === 'available' || s === 'assigned') activeCount++;
+    }
+    document.getElementById('teamCount').innerHTML = activeCount + '/' + allStaff.length + ' active';
+
+    if (allStaff.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>No staff records found. Add your first team member!</p></div>';
         return;
     }
 
     var html = '';
-    for (var k = 0; k < pending.length; k++) {
-        var op = pending[k];
-        var status = extractVal(op.op_status) || 'queued';
-        var jn = extractVal(op.job);
-        var wcn = extractVal(op.work_center) || extractVal(op.process_name) || '--';
-        var estH = extractVal(op.estimated_hours);
-        var sid = extractSysId(op.sys_id);
+    var groups = { available: [], assigned: [], off: [] };
+    for (var j = 0; j < allStaff.length; j++) {
+        var st = ev(allStaff[j].status) || 'off';
+        if (!groups[st]) groups[st] = [];
+        groups[st].push(allStaff[j]);
+    }
 
-        html += '<div class="op-item" onclick="showOperationActions(\'' + sid + '\')">' +
-            '<div class="op-seq">' + extractVal(op.sequence) + '</div>' +
-            '<div class="op-info">' +
-                '<div class="op-name">' + escHtml(wcn).toUpperCase() + '</div>' +
-                '<div class="op-meta"><span>' + escHtml(jn) + '</span>' + (estH ? '<span>' + estH + 'h est.</span>' : '') + '</div>' +
+    var order = ['assigned', 'available', 'off'];
+    var labels = { assigned: '&#128994; Working', available: '&#128309; Available', off: '&#9899; Off Shift' };
+
+    for (var g = 0; g < order.length; g++) {
+        var grp = groups[order[g]];
+        if (!grp || grp.length === 0) continue;
+        html += '<div class="stage-label ' + order[g] + '">' + labels[order[g]] + ' (' + grp.length + ')</div>';
+        for (var k = 0; k < grp.length; k++) {
+            var m = grp[k];
+            var name = ev(m.name);
+            var role = ev(m.role);
+            var empId = ev(m.employee_id);
+            var curJob = ev(m.current_job);
+            var curMachine = ev(m.current_machine);
+            var status = ev(m.status);
+            var sid = eid(m.sys_id);
+
+            html += '<div class="team-card" onclick="openStaffDetail(\'' + sid + '\')">' +
+                '<div class="team-avatar">' + (name ? name.charAt(0).toUpperCase() : '?') + '</div>' +
+                '<div class="team-info">' +
+                    '<div class="team-name">' + escHtml(name) + ' <span class="team-empid">' + escHtml(empId) + '</span></div>' +
+                    '<div class="team-meta">' + formatRole(role) +
+                    (curJob ? ' &bull; ' + escHtml(curJob) : '') +
+                    (curMachine ? ' &bull; ' + escHtml(curMachine) : '') + '</div>' +
+                '</div>' +
+                '<span class="badge ' + status + '">' + status + '</span>' +
+            '</div>';
+        }
+    }
+    container.innerHTML = html;
+}
+
+// ---- RENDER: ASSIGN WORK (Manager Only) ----
+function renderAssignments() {
+    var container = document.getElementById('unassignedOps');
+    if (!container) return;
+
+    // Find unassigned operations (no completed_by and not complete)
+    var unassigned = [];
+    for (var i = 0; i < allOperations.length; i++) {
+        var op = allOperations[i];
+        if (ev(op.op_status) === 'complete') continue;
+        if (!ev(op.completed_by)) unassigned.push(op);
+    }
+
+    document.getElementById('unassignedCount').innerHTML = unassigned.length + ' unassigned';
+
+    if (unassigned.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>All operations are assigned!</p></div>';
+        return;
+    }
+
+    var html = '';
+    for (var j = 0; j < unassigned.length; j++) {
+        var op = unassigned[j];
+        var jn = ev(op.job);
+        var wc = ev(op.work_center) || ev(op.process_name) || '--';
+        var est = ev(op.estimated_hours);
+        var sid = eid(op.sys_id);
+
+        html += '<div class="assign-item">' +
+            '<div class="assign-info">' +
+                '<div class="op-seq">' + ev(op.sequence) + '</div>' +
+                '<div class="op-info">' +
+                    '<div class="op-name">' + escHtml(wc).toUpperCase() + '</div>' +
+                    '<div class="op-meta"><span>' + escHtml(jn) + '</span>' + (est ? '<span>' + est + 'h</span>' : '') + '</div>' +
+                '</div>' +
             '</div>' +
-            '<span class="badge ' + status + '">' + status.replace('_', ' ') + '</span>' +
+            '<div class="assign-action">' +
+                '<select class="form-select assign-select" id="assign_' + sid + '">' +
+                    '<option value="">Assign to...</option>' +
+                    staffOptions() +
+                '</select>' +
+                '<button class="action-btn primary assign-btn" onclick="assignOperation(\'' + sid + '\')">Assign</button>' +
+            '</div>' +
         '</div>';
+    }
+    container.innerHTML = html;
+}
+
+function staffOptions() {
+    var html = '';
+    var available = [];
+    for (var i = 0; i < allStaff.length; i++) {
+        var s = ev(allStaff[i].status);
+        if (s !== 'off') available.push(allStaff[i]);
+    }
+    // Sort available first
+    for (var j = 0; j < allStaff.length; j++) {
+        var name = ev(allStaff[j].name);
+        var role = ev(allStaff[j].role);
+        var sid = eid(allStaff[j].sys_id);
+        html += '<option value="' + sid + '">' + escHtml(name) + ' (' + formatRole(role) + ')</option>';
+    }
+    return html;
+}
+
+// ---- RENDER: REVIEW (Manager Only) ----
+function renderReview() {
+    var container = document.getElementById('reviewList');
+    if (!container) return;
+
+    // Find operations pending review
+    var pending = [];
+    var recentlyCompleted = [];
+    for (var i = 0; i < allOperations.length; i++) {
+        var op = allOperations[i];
+        var st = ev(op.op_status);
+        if (st === 'pending_review') {
+            pending.push(op);
+        } else if (st === 'complete' && ev(op.completed_date)) {
+            recentlyCompleted.push(op);
+        }
+    }
+
+    document.getElementById('reviewCount').innerHTML = pending.length + ' pending';
+
+    var html = '';
+    if (pending.length > 0) {
+        html += '<div class="stage-label review">&#9888; Needs Your Approval (' + pending.length + ')</div>';
+        for (var j = 0; j < pending.length; j++) {
+            var op = pending[j];
+            var jn = ev(op.job);
+            var wc = ev(op.work_center) || ev(op.process_name);
+            var assignee = ev(op.completed_by);
+            var actual = ev(op.actual_hours);
+            var sid = eid(op.sys_id);
+
+            html += '<div class="review-card">' +
+                '<div class="review-header">' +
+                    '<div>' +
+                        '<div class="review-job">' + escHtml(jn) + ' &bull; ' + escHtml(wc).toUpperCase() + '</div>' +
+                        '<div class="review-meta">By: ' + escHtml(assignee) + (actual ? ' &bull; ' + actual + 'h logged' : '') + '</div>' +
+                    '</div>' +
+                    '<span class="badge pending_review">pending</span>' +
+                '</div>' +
+                '<div class="review-actions">' +
+                    '<button class="action-btn success" onclick="approveOperation(\'' + sid + '\')">&#10003; Approve</button>' +
+                    '<button class="action-btn danger" onclick="rejectOperation(\'' + sid + '\')">&#10007; Reject</button>' +
+                '</div>' +
+            '</div>';
+        }
+    }
+
+    // Recently completed
+    if (recentlyCompleted.length > 0) {
+        html += '<div class="stage-label complete">&#10003; Recently Completed (' + Math.min(recentlyCompleted.length, 10) + ')</div>';
+        for (var k = 0; k < Math.min(recentlyCompleted.length, 10); k++) {
+            var oc = recentlyCompleted[k];
+            html += '<div class="op-item" style="opacity:0.7;cursor:default;">' +
+                '<div class="op-seq" style="background:rgba(34,197,94,0.2);color:#22C55E;">' + ev(oc.sequence) + '</div>' +
+                '<div class="op-info">' +
+                    '<div class="op-name">' + escHtml(ev(oc.work_center) || ev(oc.process_name)).toUpperCase() + '</div>' +
+                    '<div class="op-meta"><span>' + escHtml(ev(oc.job)) + '</span><span>' + escHtml(ev(oc.completed_by)) + '</span></div>' +
+                '</div>' +
+                '<span class="badge complete">complete</span>' +
+            '</div>';
+        }
+    }
+
+    if (html === '') {
+        html = '<div class="empty-state"><p>No operations to review.</p></div>';
     }
     container.innerHTML = html;
 }
@@ -208,7 +499,7 @@ function renderMachines() {
     var container = document.getElementById('machineList');
     var runCount = 0;
     for (var i = 0; i < allMachines.length; i++) {
-        if (extractVal(allMachines[i].status) === 'running') runCount++;
+        if (ev(allMachines[i].status) === 'running') runCount++;
     }
     document.getElementById('machineCount').innerHTML = runCount + '/' + allMachines.length + ' running';
 
@@ -220,11 +511,11 @@ function renderMachines() {
     var html = '<div class="machine-grid">';
     for (var j = 0; j < allMachines.length; j++) {
         var m = allMachines[j];
-        var status = extractVal(m.status) || 'idle';
-        var name = extractVal(m.machine_name);
-        var number = extractVal(m.machine_number);
-        var job = extractVal(m.current_job);
-        var sysId = extractSysId(m.sys_id);
+        var status = ev(m.status) || 'idle';
+        var name = ev(m.machine_name);
+        var number = ev(m.machine_number);
+        var job = ev(m.current_job);
+        var sysId = eid(m.sys_id);
 
         html += '<div class="machine-card ' + status + '" onclick="openMachineModal(\'' + sysId + '\')">' +
             '<div class="machine-card-name">' + escHtml(name) + '</div>' +
@@ -241,41 +532,39 @@ function renderMachines() {
 function renderTimeLog() {
     var select = document.getElementById('logOperation');
     var opts = '<option value="">Select an operation...</option>';
-    for (var i = 0; i < myOperations.length; i++) {
-        var op = myOperations[i];
-        var wc = extractVal(op.work_center) || extractVal(op.process_name);
-        var jb = extractVal(op.job);
-        opts += '<option value="' + extractSysId(op.sys_id) + '">' + escHtml(jb) + ' - ' + escHtml(wc) + '</option>';
+    var opsList = isManager ? allOperations : myOperations;
+    for (var i = 0; i < opsList.length; i++) {
+        var op = opsList[i];
+        if (ev(op.op_status) === 'complete') continue;
+        var wc = ev(op.work_center) || ev(op.process_name);
+        var jb = ev(op.job);
+        opts += '<option value="' + eid(op.sys_id) + '">' + escHtml(jb) + ' - ' + escHtml(wc) + '</option>';
     }
     select.innerHTML = opts;
 
     var container = document.getElementById('timeEntries');
     var opsWithHours = [];
-    for (var j = 0; j < myOperations.length; j++) {
-        if (parseFloat(extractVal(myOperations[j].actual_hours)) > 0) opsWithHours.push(myOperations[j]);
+    for (var j = 0; j < opsList.length; j++) {
+        if (parseFloat(ev(opsList[j].actual_hours)) > 0) opsWithHours.push(opsList[j]);
     }
 
     if (opsWithHours.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No time entries yet. Log your first hours above!</p></div>';
+        container.innerHTML = '<div class="empty-state"><p>No time entries yet.</p></div>';
         return;
     }
 
     var html = '';
     for (var k = 0; k < opsWithHours.length; k++) {
         var o = opsWithHours[k];
-        var job2 = extractVal(o.job);
-        var wc2 = extractVal(o.work_center) || extractVal(o.process_name);
-        var hours = extractVal(o.actual_hours);
-        var date = extractVal(o.started_date) || '';
-
         html += '<div class="time-entry">' +
             '<div class="time-entry-icon"><span style="font-size:18px;color:#3B82F6;">&#9201;</span></div>' +
             '<div class="time-entry-info">' +
-                '<div class="time-entry-job">' + escHtml(job2) + '</div>' +
-                '<div class="time-entry-detail">' + escHtml(wc2) + '</div>' +
+                '<div class="time-entry-job">' + escHtml(ev(o.job)) + '</div>' +
+                '<div class="time-entry-detail">' + escHtml(ev(o.work_center) || ev(o.process_name)) +
+                (ev(o.completed_by) ? ' &bull; ' + escHtml(ev(o.completed_by)) : '') + '</div>' +
             '</div>' +
-            '<div><div class="time-entry-hours">' + hours + 'h</div>' +
-            '<div class="time-entry-date">' + (date ? date.split(' ')[0] : '') + '</div></div>' +
+            '<div><div class="time-entry-hours">' + ev(o.actual_hours) + 'h</div>' +
+            '<div class="time-entry-date">' + (ev(o.started_date) ? ev(o.started_date).split(' ')[0] : '') + '</div></div>' +
         '</div>';
     }
     container.innerHTML = html;
@@ -284,177 +573,174 @@ function renderTimeLog() {
 // ---- RENDER: PROFILE ----
 function renderProfile() {
     if (!staffRecord) return;
+    document.getElementById('profileEmpId').innerHTML = ev(staffRecord.employee_id) || '--';
+    document.getElementById('profileRole').innerHTML = formatRole(ev(staffRecord.role));
+    document.getElementById('profileShift').innerHTML = (ev(staffRecord.shift) || '--').toUpperCase();
+    document.getElementById('profileStatus').innerHTML = '<span class="badge ' + ev(staffRecord.status) + '">' + ev(staffRecord.status) + '</span>';
+    document.getElementById('profileMachine').innerHTML = ev(staffRecord.current_machine) || 'None';
 
-    document.getElementById('profileEmpId').innerHTML = extractVal(staffRecord.employee_id) || '--';
-    document.getElementById('profileRole').innerHTML = formatRole(extractVal(staffRecord.role));
-    document.getElementById('profileShift').innerHTML = (extractVal(staffRecord.shift) || '--').toUpperCase();
-    document.getElementById('profileStatus').innerHTML = '<span class="badge ' + extractVal(staffRecord.status) + '">' + extractVal(staffRecord.status) + '</span>';
-    document.getElementById('profileMachine').innerHTML = extractVal(staffRecord.current_machine) || 'None';
-
-    document.getElementById('statJobsCompleted').innerHTML = extractVal(staffRecord.jobs_completed_this_week) || '0';
+    document.getElementById('statJobsCompleted').innerHTML = ev(staffRecord.jobs_completed_this_week) || '0';
     var totalHours = 0;
     for (var i = 0; i < myOperations.length; i++) {
-        totalHours += parseFloat(extractVal(myOperations[i].actual_hours)) || 0;
+        totalHours += parseFloat(ev(myOperations[i].actual_hours)) || 0;
     }
     document.getElementById('statHoursLogged').innerHTML = totalHours.toFixed(1);
-    var completedOps = 0;
-    for (var j = 0; j < myOperations.length; j++) {
-        if (extractVal(myOperations[j].op_status) === 'complete') completedOps++;
-    }
-    document.getElementById('statOpsCompleted').innerHTML = completedOps;
-    document.getElementById('statCurrentStreak').innerHTML = Math.min(parseInt(extractVal(staffRecord.jobs_completed_this_week)) || 0, 5);
 }
 
-// ---- ACTIONS ----
-function showOperationActions(sysId) {
-    var op = null;
-    for (var i = 0; i < myOperations.length; i++) {
-        if (extractSysId(myOperations[i].sys_id) === sysId) { op = myOperations[i]; break; }
-    }
-    if (!op) return;
+// ======= ACTIONS =======
 
-    var status = extractVal(op.op_status);
-    if (status === 'queued' || status === 'pending') {
-        if (confirm('Start working on this operation?')) {
-            startOperation(sysId);
-        }
-    } else {
-        openJobDetail(op);
+// -- Employee: start operation --
+function showOperationActions(sysId) {
+    var op = findOp(sysId);
+    if (!op) return;
+    var status = ev(op.op_status);
+    if (status === 'queued' || status === 'pending' || status === 'assigned' || status === 'on_hold') {
+        if (confirm('Start working on this operation?')) startOperation(sysId);
     }
 }
 
 function startOperation(sysId) {
-    var now = new Date();
-    var dateStr = now.toISOString().replace('T', ' ').split('.')[0];
-    apiPatch('x_1964226_svem_com_operations', sysId, {
+    var patchData = {
         op_status: 'in_progress',
-        started_date: dateStr
-    }).then(function() {
+        started_date: nowStr()
+    };
+    if (staffRecord) patchData.completed_by = eid(staffRecord.sys_id);
+    apiPatch('x_1964226_svem_com_operations', sysId, patchData)
+    .then(function() {
         showToast('Operation started!', 'success');
-        return loadMyOperations();
-    }).then(function() {
-        renderTasks();
-        renderTimeLog();
-    }).catch(function() {
-        showToast('Error starting operation', 'error');
-    });
+        return refreshAll();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
 function pauseOperation(sysId) {
     apiPatch('x_1964226_svem_com_operations', sysId, { op_status: 'on_hold' })
     .then(function() {
         showToast('Operation paused', 'success');
-        return loadMyOperations();
-    }).then(function() {
-        renderTasks();
-    }).catch(function() {
-        showToast('Error pausing operation', 'error');
-    });
+        return refreshAll();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
-function completeOperation(sysId) {
-    if (!confirm('Mark this operation as complete?')) return;
+function submitForReview(sysId) {
+    if (!confirm('Submit this operation for manager review?')) return;
     var elapsed = timerElapsed / 3600;
-    var patchData = {
-        op_status: 'complete',
-        completed_date: new Date().toISOString().replace('T', ' ').split('.')[0]
-    };
-    if (elapsed > 0) patchData.actual_hours = elapsed.toFixed(2);
-
+    var patchData = { op_status: 'pending_review' };
+    if (elapsed > 0.01) patchData.actual_hours = elapsed.toFixed(2);
     apiPatch('x_1964226_svem_com_operations', sysId, patchData)
     .then(function() {
-        showToast('Operation completed!', 'success');
+        showToast('Submitted for review!', 'success');
         stopTimer();
-        return loadMyOperations();
-    }).then(function() {
-        renderTasks();
-        renderTimeLog();
-    }).catch(function() {
-        showToast('Error completing operation', 'error');
-    });
+        return refreshAll();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
-function submitTimeLog() {
-    var opId = document.getElementById('logOperation').value;
-    var hours = parseFloat(document.getElementById('logHours').value);
-    var notes = document.getElementById('logNotes').value;
+// -- Manager: assign --
+function assignOperation(opSysId) {
+    var select = document.getElementById('assign_' + opSysId);
+    var staffSysId = select ? select.value : '';
+    if (!staffSysId) { showToast('Select a team member', 'error'); return; }
 
-    if (!opId) { showToast('Please select an operation', 'error'); return; }
-    if (!hours || hours <= 0) { showToast('Please enter valid hours', 'error'); return; }
-
-    var op = null;
-    for (var i = 0; i < myOperations.length; i++) {
-        if (extractSysId(myOperations[i].sys_id) === opId) { op = myOperations[i]; break; }
-    }
-    var existing = op ? (parseFloat(extractVal(op.actual_hours)) || 0) : 0;
-    var patchData = { actual_hours: (existing + hours).toFixed(2) };
-    if (notes) patchData.notes = notes;
-
-    apiPatch('x_1964226_svem_com_operations', opId, patchData)
-    .then(function() {
-        showToast(hours + ' hours logged!', 'success');
-        document.getElementById('logHours').value = '';
-        document.getElementById('logNotes').value = '';
-        return loadMyOperations();
+    apiPatch('x_1964226_svem_com_operations', opSysId, {
+        completed_by: staffSysId,
+        op_status: 'assigned'
     }).then(function() {
-        renderTimeLog();
-        renderProfile();
-    }).catch(function() {
-        showToast('Error logging hours', 'error');
-    });
+        showToast('Operation assigned!', 'success');
+        return refreshAll();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
-// ---- CLOCK IN/OUT ----
+// -- Manager: approve/reject --
+function approveOperation(sysId) {
+    if (!confirm('Approve this operation as complete?')) return;
+    apiPatch('x_1964226_svem_com_operations', sysId, {
+        op_status: 'complete',
+        completed_date: nowStr()
+    }).then(function() {
+        showToast('Operation approved!', 'success');
+        return refreshAll();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
+}
+
+function rejectOperation(sysId) {
+    var reason = prompt('Reason for rejection (optional):');
+    apiPatch('x_1964226_svem_com_operations', sysId, {
+        op_status: 'on_hold',
+        notes: reason ? 'REJECTED: ' + reason : 'REJECTED - Needs rework'
+    }).then(function() {
+        showToast('Operation rejected and sent back', 'success');
+        return refreshAll();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
+}
+
+// -- Manager: add staff --
+function showAddStaff() {
+    document.getElementById('addStaffModal').className = 'modal-overlay active';
+}
+
+function createStaffMember() {
+    var name = document.getElementById('newStaffName').value.trim();
+    var role = document.getElementById('newStaffRole').value;
+    var shift = document.getElementById('newStaffShift').value;
+
+    if (!name) { showToast('Name is required', 'error'); return; }
+    if (!role) { showToast('Role is required', 'error'); return; }
+
+    apiPost('x_1964226_svem_com_staff', {
+        name: name,
+        role: role,
+        shift: shift || 'day',
+        status: 'available'
+    }).then(function() {
+        showToast('Staff member added!', 'success');
+        closeModal('addStaffModal');
+        document.getElementById('newStaffName').value = '';
+        return loadAllStaff();
+    }).then(function() {
+        renderTeam();
+        renderAssignments();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
+}
+
+// -- Clock in/out --
 function toggleClock() {
     if (!staffRecord) { showToast('Staff record not found', 'error'); return; }
     var newStatus = clockedIn ? 'off' : 'available';
-    apiPatch('x_1964226_svem_com_staff', extractSysId(staffRecord.sys_id), { status: newStatus })
+    apiPatch('x_1964226_svem_com_staff', eid(staffRecord.sys_id), { status: newStatus })
     .then(function() {
         clockedIn = !clockedIn;
         staffRecord.status = { display_value: newStatus, value: newStatus };
         updateClockBtn();
         renderProfile();
+        if (isManager) renderTeam();
         showToast(clockedIn ? 'Clocked in!' : 'Clocked out!', 'success');
-    }).catch(function() {
-        showToast('Error updating status', 'error');
-    });
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
 function updateClockBtn() {
     var btn = document.getElementById('clockBtn');
-    if (clockedIn) {
-        btn.innerHTML = 'Clock Out';
-        btn.className = 'clock-btn clock-out';
-    } else {
-        btn.innerHTML = 'Clock In';
-        btn.className = 'clock-btn clock-in';
-    }
+    btn.innerHTML = clockedIn ? 'Clock Out' : 'Clock In';
+    btn.className = 'clock-btn ' + (clockedIn ? 'clock-out' : 'clock-in');
 }
 
-// ---- MACHINE MODAL ----
+// -- Machine modal --
 function openMachineModal(sysId) {
     var machine = null;
     for (var i = 0; i < allMachines.length; i++) {
-        if (extractSysId(allMachines[i].sys_id) === sysId) { machine = allMachines[i]; break; }
+        if (eid(allMachines[i].sys_id) === sysId) { machine = allMachines[i]; break; }
     }
     if (!machine) return;
-
     selectedMachineSysId = sysId;
-    selectedMachineStatus = extractVal(machine.status);
-
-    document.getElementById('machineModalName').innerHTML = escHtml(extractVal(machine.machine_name));
-    document.getElementById('machineModalInfo').innerHTML = escHtml(extractVal(machine.machine_number)) + ' &bull; ' + escHtml(extractVal(machine.machine_type));
-
+    selectedMachineStatus = ev(machine.status);
+    document.getElementById('machineModalName').innerHTML = escHtml(ev(machine.machine_name));
+    document.getElementById('machineModalInfo').innerHTML = escHtml(ev(machine.machine_number)) + ' &bull; ' + escHtml(ev(machine.machine_type));
     var opts = document.querySelectorAll('.status-option');
-    for (var j = 0; j < opts.length; j++) { opts[j].className = 'status-option'; }
-
+    for (var j = 0; j < opts.length; j++) opts[j].className = 'status-option';
     document.getElementById('machineModal').className = 'modal-overlay active';
 }
 
 function selectMachineStatus(status, el) {
     selectedMachineStatus = status;
     var opts = document.querySelectorAll('.status-option');
-    for (var i = 0; i < opts.length; i++) { opts[i].className = 'status-option'; }
+    for (var i = 0; i < opts.length; i++) opts[i].className = 'status-option';
     el.className = 'status-option selected';
 }
 
@@ -465,52 +751,102 @@ function saveMachineStatus() {
         showToast('Machine status updated!', 'success');
         closeModal('machineModal');
         return loadMachines();
-    }).then(function() {
-        renderMachines();
-    }).catch(function() {
-        showToast('Error updating machine', 'error');
-    });
+    }).then(function() { renderMachines(); })
+    .catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
-// ---- JOB DETAIL ----
+// -- Time log --
+function submitTimeLog() {
+    var opId = document.getElementById('logOperation').value;
+    var hours = parseFloat(document.getElementById('logHours').value);
+    var notes = document.getElementById('logNotes').value;
+    if (!opId) { showToast('Select an operation', 'error'); return; }
+    if (!hours || hours <= 0) { showToast('Enter valid hours', 'error'); return; }
+
+    var op = findOp(opId);
+    var existing = op ? (parseFloat(ev(op.actual_hours)) || 0) : 0;
+    var patchData = { actual_hours: (existing + hours).toFixed(2) };
+    if (notes) patchData.notes = notes;
+
+    apiPatch('x_1964226_svem_com_operations', opId, patchData)
+    .then(function() {
+        showToast(hours + 'h logged!', 'success');
+        document.getElementById('logHours').value = '';
+        document.getElementById('logNotes').value = '';
+        return refreshAll();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
+}
+
+// -- Job detail --
+function openJobDetail2(sysId) {
+    var op = findOp(sysId);
+    if (!op) return;
+    openJobDetail(op);
+}
+
 function openJobDetail(op) {
-    var jobRef = extractVal(op.job);
+    var jobRef = ev(op.job);
     document.getElementById('modalJobNumber').innerHTML = escHtml(jobRef);
-    document.getElementById('modalJobInfo').innerHTML = escHtml(extractVal(op.work_center) || '');
+    document.getElementById('modalJobInfo').innerHTML = '';
 
     var jobOps = [];
-    for (var i = 0; i < myOperations.length; i++) {
-        if (extractVal(myOperations[i].job) === jobRef) jobOps.push(myOperations[i]);
+    for (var i = 0; i < allOperations.length; i++) {
+        if (ev(allOperations[i].job) === jobRef) jobOps.push(allOperations[i]);
     }
-    jobOps.sort(function(a, b) { return parseInt(extractVal(a.sequence)) - parseInt(extractVal(b.sequence)); });
+    jobOps.sort(function(a, b) { return parseInt(ev(a.sequence)) - parseInt(ev(b.sequence)); });
 
     var html = '';
     for (var j = 0; j < jobOps.length; j++) {
         var o = jobOps[j];
-        var st = extractVal(o.op_status) || 'queued';
-        var wcn = extractVal(o.work_center) || extractVal(o.process_name) || '--';
-        var est = extractVal(o.estimated_hours);
-        var act = extractVal(o.actual_hours);
-
+        var st = ev(o.op_status) || 'queued';
+        var wcn = ev(o.work_center) || ev(o.process_name) || '--';
         html += '<div class="routing-step">' +
-            '<div class="routing-dot ' + st + '">' + extractVal(o.sequence) + '</div>' +
+            '<div class="routing-dot ' + st + '">' + ev(o.sequence) + '</div>' +
             '<div class="routing-info">' +
                 '<div class="routing-wc">' + escHtml(wcn).toUpperCase() + '</div>' +
-                '<div class="routing-desc">' + escHtml(extractVal(o.description) || 'No description') + '</div>' +
-                '<div class="routing-hours">' + (est ? 'Est: ' + est + 'h' : '') + (act ? ' &bull; Actual: ' + act + 'h' : '') + '</div>' +
+                '<div class="routing-desc">' + escHtml(ev(o.description) || ev(o.completed_by) || 'Unassigned') + '</div>' +
             '</div>' +
-            '<span class="badge ' + st + '">' + st.replace('_', ' ') + '</span>' +
+            '<span class="badge ' + st + '">' + st.replace(/_/g, ' ') + '</span>' +
         '</div>';
     }
-    document.getElementById('modalRouting').innerHTML = html || '<div class="empty-state"><p>No routing steps found</p></div>';
+    document.getElementById('modalRouting').innerHTML = html || '<div class="empty-state"><p>No routing steps</p></div>';
     document.getElementById('jobDetailModal').className = 'modal-overlay active';
 }
 
-// ---- TIMER ----
+function openStaffDetail(sysId) {
+    var s = null;
+    for (var i = 0; i < allStaff.length; i++) {
+        if (eid(allStaff[i].sys_id) === sysId) { s = allStaff[i]; break; }
+    }
+    if (!s) return;
+    window.open('/x_1964226_svem_com_staff.do?sys_id=' + sysId, '_blank');
+}
+
+// ======= HELPERS =======
+function refreshAll() {
+    return Promise.all([loadAllStaff(), loadAllOperations(), loadMachines(), loadJobs()])
+    .then(function() {
+        filterMyOperations();
+        renderTasks();
+        renderMachines();
+        renderTimeLog();
+        renderProfile();
+        if (isManager) { renderTeam(); renderAssignments(); renderReview(); }
+    });
+}
+
+function findOp(sysId) {
+    for (var i = 0; i < allOperations.length; i++) {
+        if (eid(allOperations[i].sys_id) === sysId) return allOperations[i];
+    }
+    return null;
+}
+
+function nowStr() { return new Date().toISOString().replace('T', ' ').split('.')[0]; }
+
 function startTimer() {
     if (activeTimer) return;
-    timerStart = Date.now();
-    timerElapsed = 0;
+    timerStart = Date.now(); timerElapsed = 0;
     activeTimer = setInterval(function() {
         timerElapsed = (Date.now() - timerStart) / 1000;
         var h = Math.floor(timerElapsed / 3600);
@@ -520,347 +856,223 @@ function startTimer() {
         if (el) el.innerHTML = pad(h) + ':' + pad(m) + ':' + pad(s);
     }, 1000);
 }
-
-function stopTimer() {
-    if (activeTimer) { clearInterval(activeTimer); activeTimer = null; }
-    timerElapsed = 0;
-}
-
+function stopTimer() { if (activeTimer) { clearInterval(activeTimer); activeTimer = null; } timerElapsed = 0; }
 function pad(n) { return (n < 10 ? '0' : '') + n; }
 
-// ---- UI HELPERS ----
 function switchTab(tabName, btn) {
     var tabs = document.querySelectorAll('.tab-content');
     for (var i = 0; i < tabs.length; i++) tabs[i].className = 'tab-content';
     var btns = document.querySelectorAll('.tab-btn');
-    for (var j = 0; j < btns.length; j++) btns[j].className = 'tab-btn';
+    for (var j = 0; j < btns.length; j++) { btns[j].className = btns[j].className.replace(' active', ''); }
     document.getElementById('tab-' + tabName).className = 'tab-content active';
-    btn.className = 'tab-btn active';
+    btn.className += ' active';
 }
 
 function closeModal(id) { document.getElementById(id).className = 'modal-overlay'; }
-
 function showToast(msg, type) {
-    var toast = document.getElementById('toast');
-    toast.innerHTML = escHtml(msg);
-    toast.className = 'toast ' + (type || '') + ' show';
-    setTimeout(function() { toast.className = 'toast'; }, 2500);
+    var t = document.getElementById('toast');
+    t.innerHTML = escHtml(msg); t.className = 'toast ' + (type || '') + ' show';
+    setTimeout(function() { t.className = 'toast'; }, 2500);
 }
-
 function formatRole(role) {
-    var map = {
-        operator: 'Operator', setup_operator: 'Setup Operator', qc_technician: 'QC Technician',
-        programmer: 'Programmer', deburr_operator: 'Deburr Operator', material_handler: 'Material Handler',
-        driver: 'Driver', shipping_technician: 'Shipping Tech'
-    };
+    var map = { operator:'Operator', setup_operator:'Setup Operator', qc_technician:'QC Tech', programmer:'Programmer', deburr_operator:'Deburr Op', material_handler:'Material Handler', driver:'Driver', shipping_technician:'Shipping Tech', manager:'Manager', supervisor:'Supervisor' };
     return map[role] || (role || '').replace(/_/g, ' ');
 }
-
-function escHtml(s) {
-    if (!s) return '';
-    var d = document.createElement('div');
-    d.appendChild(document.createTextNode(s));
-    return d.innerHTML;
-}
+function escHtml(s) { if (!s) return ''; var d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
 ]]></client_script>
-        <description>SVEM Employee Portal - Shop Floor Worker View</description>
+        <description>SVEM Employee Portal v2 - Role-Based Management System</description>
         <direct>true</direct>
         <endpoint>x_1964226_svem_com_employee_portal.do</endpoint>
         <html><![CDATA[<html>
 <head>
     <title>SVEM Employee Portal</title>
-    <script>window._svemUserName = "$[gs.getUserName()]";</script>
-    <script>window.g_ck = "$[gs.getSession().getSessionToken() || gs.getSessionToken()]";</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <script>
+    window._svemUserName = "$[gs.getUserName()]";
+    window._svemFullName = "$[gs.getUserDisplayName()]";
+    window._svemIsAdmin = "$[gs.hasRole('admin')]";
+    </script>
+    <script>window.g_ck = "$[gs.getSession().getSessionToken() || gs.getSessionToken()]";</script>
     <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
+:root { --bg-primary:#0F1117; --bg-secondary:#1A1D27; --bg-tertiary:#2A2D3A; --border:#2A2D3A; --text-primary:#E8E9ED; --text-secondary:#8B8D97; --accent:#3B82F6; --accent-hover:#2563EB; --success:#22C55E; --warning:#F59E0B; --danger:#EF4444; --tab-height:64px; --header-height:56px; }
+html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text-primary); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; height:100vh; overflow:hidden; -webkit-font-smoothing:antialiased; }
 
-:root {
-    --bg-primary: #0F1117;
-    --bg-secondary: #1A1D27;
-    --bg-tertiary: #2A2D3A;
-    --border: #2A2D3A;
-    --text-primary: #E8E9ED;
-    --text-secondary: #8B8D97;
-    --accent: #3B82F6;
-    --accent-hover: #2563EB;
-    --success: #22C55E;
-    --warning: #F59E0B;
-    --danger: #EF4444;
-    --tab-height: 64px;
-    --header-height: 56px;
-}
+.header { height:var(--header-height); background:var(--bg-secondary); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 16px; position:fixed; top:0; left:0; right:0; z-index:100; }
+.header-left { display:flex; align-items:center; gap:10px; }
+.header-avatar { width:36px; height:36px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:white; }
+.header-info h1 { font-size:15px; font-weight:600; color:var(--text-primary); line-height:1.2; }
+.header-info p { font-size:11px; color:var(--text-secondary); line-height:1.2; }
+.header-right { display:flex; align-items:center; gap:8px; }
 
-html, body {
-    margin: 0; padding: 0;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    height: 100vh;
-    overflow: hidden;
-    -webkit-font-smoothing: antialiased;
-}
+.role-badge { padding:3px 8px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:0.5px; }
+.role-badge.manager { background:rgba(245,158,11,0.15); color:var(--warning); }
+.role-badge.employee { background:rgba(59,130,246,0.15); color:var(--accent); }
 
-.header {
-    height: var(--header-height);
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 16px;
-    position: fixed; top: 0; left: 0; right: 0;
-    z-index: 100;
-}
+.clock-btn { padding:8px 14px; border-radius:8px; border:none; font-size:12px; font-weight:600; cursor:pointer; }
+.clock-btn.clock-in { background:var(--success); color:white; }
+.clock-btn.clock-out { background:var(--danger); color:white; }
 
-.header-left { display: flex; align-items: center; gap: 12px; }
+.main-content { position:fixed; top:var(--header-height); bottom:var(--tab-height); left:0; right:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.tab-content { display:none; padding:16px; padding-bottom:24px; }
+.tab-content.active { display:block; }
 
-.header-avatar {
-    width: 36px; height: 36px;
-    border-radius: 50%;
-    background: var(--accent);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; font-weight: 700; color: white;
-}
+.bottom-tabs { position:fixed; bottom:0; left:0; right:0; height:var(--tab-height); background:var(--bg-secondary); border-top:1px solid var(--border); display:grid; z-index:100; padding-bottom:env(safe-area-inset-bottom); }
+.tab-btn { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; background:none; border:none; color:var(--text-secondary); font-size:9px; font-weight:500; cursor:pointer; transition:color 0.2s; }
+.tab-btn.active { color:var(--accent); }
+.tab-btn svg { width:22px; height:22px; }
 
-.header-info h1 { font-size: 16px; font-weight: 600; color: var(--text-primary); line-height: 1.2; }
-.header-info p { font-size: 11px; color: var(--text-secondary); line-height: 1.2; }
+.section-header { font-size:12px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin:16px 0 10px; display:flex; align-items:center; justify-content:space-between; }
+.section-header:first-child { margin-top:0; }
 
-.clock-btn {
-    padding: 8px 16px; border-radius: 8px; border: none;
-    font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
-}
-.clock-btn.clock-in { background: var(--success); color: white; }
-.clock-btn.clock-out { background: var(--danger); color: white; }
+.badge { display:inline-flex; padding:3px 8px; border-radius:4px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; }
+.badge.running { background:rgba(34,197,94,0.15); color:var(--success); }
+.badge.idle { background:rgba(139,141,151,0.15); color:var(--text-secondary); }
+.badge.maintenance { background:rgba(239,68,68,0.15); color:var(--danger); }
+.badge.queued,.badge.pending { background:rgba(245,158,11,0.15); color:var(--warning); }
+.badge.in_progress { background:rgba(59,130,246,0.15); color:var(--accent); }
+.badge.complete { background:rgba(34,197,94,0.15); color:var(--success); }
+.badge.on_hold { background:rgba(239,68,68,0.15); color:var(--danger); }
+.badge.assigned { background:rgba(139,90,246,0.15); color:#A78BFA; }
+.badge.pending_review { background:rgba(245,158,11,0.15); color:var(--warning); }
+.badge.available { background:rgba(34,197,94,0.15); color:var(--success); }
+.badge.off { background:rgba(139,141,151,0.15); color:var(--text-secondary); }
 
-.main-content {
-    position: fixed;
-    top: var(--header-height);
-    bottom: var(--tab-height);
-    left: 0; right: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-}
+.stage-label { font-size:12px; font-weight:700; padding:8px 12px; margin:12px 0 8px; border-radius:6px; }
+.stage-label.review { background:rgba(245,158,11,0.08); color:var(--warning); border-left:3px solid var(--warning); }
+.stage-label.hold { background:rgba(239,68,68,0.08); color:var(--danger); border-left:3px solid var(--danger); }
+.stage-label.assigned { background:rgba(139,90,246,0.08); color:#A78BFA; border-left:3px solid #A78BFA; }
+.stage-label.queued { background:rgba(139,141,151,0.08); color:var(--text-secondary); border-left:3px solid var(--text-secondary); }
+.stage-label.complete { background:rgba(34,197,94,0.08); color:var(--success); border-left:3px solid var(--success); }
 
-.tab-content { display: none; padding: 16px; padding-bottom: 24px; }
-.tab-content.active { display: block; }
+.active-task { background:linear-gradient(135deg,rgba(59,130,246,0.1),rgba(59,130,246,0.05)); border:1px solid rgba(59,130,246,0.3); border-radius:12px; padding:16px; margin-bottom:16px; }
+.active-task-label { font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+.active-task-job { font-size:18px; font-weight:700; }
+.active-task-op { font-size:13px; color:var(--text-secondary); margin-top:4px; }
+.active-task-timer { font-size:32px; font-weight:700; color:var(--accent); font-variant-numeric:tabular-nums; margin:12px 0; text-align:center; }
+.active-task-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 
-.bottom-tabs {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    height: var(--tab-height);
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border);
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    z-index: 100;
-    padding-bottom: env(safe-area-inset-bottom);
-}
+.action-btn { padding:11px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.2s; }
+.action-btn.primary { background:var(--accent); color:white; }
+.action-btn.success { background:var(--success); color:white; }
+.action-btn.warning { background:var(--warning); color:#000; }
+.action-btn.danger { background:var(--danger); color:white; }
+.action-btn.secondary { background:var(--bg-tertiary); color:var(--text-primary); }
+.action-btn.full { grid-column:1/-1; }
 
-.tab-btn {
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 4px;
-    background: none; border: none;
-    color: var(--text-secondary);
-    font-size: 10px; font-weight: 500;
-    cursor: pointer; transition: color 0.2s;
-}
-.tab-btn.active { color: var(--accent); }
-.tab-btn svg { width: 24px; height: 24px; }
+.op-item { display:flex; align-items:center; gap:10px; padding:10px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; margin-bottom:6px; cursor:pointer; transition:background 0.15s; }
+.op-item:hover { background:rgba(59,130,246,0.05); }
+.op-seq { width:30px; height:30px; border-radius:8px; background:var(--bg-tertiary); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; }
+.op-info { flex:1; min-width:0; }
+.op-name { font-size:13px; font-weight:600; }
+.op-meta { font-size:10px; color:var(--text-secondary); margin-top:2px; }
+.op-meta span { margin-right:8px; }
 
-.section-header {
-    font-size: 13px; font-weight: 700; color: var(--text-secondary);
-    text-transform: uppercase; letter-spacing: 0.5px;
-    margin: 20px 0 12px 0;
-    display: flex; align-items: center; justify-content: space-between;
-}
-.section-header:first-child { margin-top: 0; }
+/* Team cards */
+.team-card { display:flex; align-items:center; gap:12px; padding:12px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; margin-bottom:6px; cursor:pointer; transition:background 0.15s; }
+.team-card:hover { background:rgba(59,130,246,0.05); }
+.team-avatar { width:38px; height:38px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; color:white; flex-shrink:0; }
+.team-info { flex:1; }
+.team-name { font-size:14px; font-weight:600; }
+.team-empid { font-size:11px; color:var(--text-secondary); font-weight:400; }
+.team-meta { font-size:11px; color:var(--text-secondary); margin-top:2px; }
 
-.badge {
-    display: inline-flex; align-items: center;
-    padding: 3px 8px; border-radius: 4px;
-    font-size: 11px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.3px;
-}
-.badge.running { background: rgba(34,197,94,0.15); color: var(--success); }
-.badge.idle { background: rgba(139,141,151,0.15); color: var(--text-secondary); }
-.badge.maintenance { background: rgba(239,68,68,0.15); color: var(--danger); }
-.badge.queued { background: rgba(245,158,11,0.15); color: var(--warning); }
-.badge.in_progress { background: rgba(59,130,246,0.15); color: var(--accent); }
-.badge.complete { background: rgba(34,197,94,0.15); color: var(--success); }
-.badge.on_hold { background: rgba(139,141,151,0.15); color: var(--text-secondary); }
-.badge.pending { background: rgba(245,158,11,0.15); color: var(--warning); }
-.badge.available { background: rgba(34,197,94,0.15); color: var(--success); }
-.badge.assigned { background: rgba(59,130,246,0.15); color: var(--accent); }
-.badge.off { background: rgba(139,141,151,0.15); color: var(--text-secondary); }
+/* Assign work */
+.assign-item { background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:8px; }
+.assign-info { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.assign-action { display:flex; gap:8px; }
+.assign-select { flex:1; padding:8px; background:var(--bg-primary); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:12px; }
+.assign-select option { background:var(--bg-primary); }
+.assign-btn { padding:8px 16px; font-size:12px; white-space:nowrap; }
 
-.active-task {
-    background: linear-gradient(135deg, rgba(59,130,246,0.1), rgba(59,130,246,0.05));
-    border: 1px solid rgba(59,130,246,0.3);
-    border-radius: 12px; padding: 16px; margin-bottom: 16px;
-}
-.active-task-label { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
-.active-task-job { font-size: 18px; font-weight: 700; color: var(--text-primary); }
-.active-task-op { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
-.active-task-timer { font-size: 32px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; margin: 12px 0; text-align: center; }
-.active-task-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+/* Review cards */
+.review-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:8px; }
+.review-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; }
+.review-job { font-size:14px; font-weight:600; }
+.review-meta { font-size:11px; color:var(--text-secondary); margin-top:3px; }
+.review-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 
-.action-btn {
-    padding: 12px; border: none; border-radius: 8px;
-    font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-}
-.action-btn.primary { background: var(--accent); color: white; }
-.action-btn.success { background: var(--success); color: white; }
-.action-btn.warning { background: var(--warning); color: #000; }
-.action-btn.danger { background: var(--danger); color: white; }
-.action-btn.secondary { background: var(--bg-tertiary); color: var(--text-primary); }
-.action-btn.full { grid-column: 1 / -1; }
+/* Machine grid */
+.machine-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; }
+.machine-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:12px 10px; cursor:pointer; text-align:center; transition:all 0.2s; }
+.machine-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.3); }
+.machine-card.running { border-left:4px solid var(--success); }
+.machine-card.idle { border-left:4px solid var(--text-secondary); }
+.machine-card.maintenance { border-left:4px solid var(--danger); }
+.machine-card-name { font-size:13px; font-weight:700; margin-bottom:4px; }
+.machine-card-number { font-size:10px; color:var(--text-secondary); margin-bottom:6px; }
+.machine-card-job { font-size:10px; color:var(--accent); margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-.op-item {
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px; background: var(--bg-secondary);
-    border: 1px solid var(--border); border-radius: 8px;
-    margin-bottom: 8px; cursor: pointer; transition: background 0.15s;
-}
-.op-item:hover { background: rgba(59,130,246,0.05); }
+/* Time log */
+.time-entry { display:flex; align-items:center; gap:10px; padding:10px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; margin-bottom:6px; }
+.time-entry-icon { width:32px; height:32px; border-radius:8px; background:rgba(59,130,246,0.1); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.time-entry-info { flex:1; }
+.time-entry-job { font-size:13px; font-weight:600; }
+.time-entry-detail { font-size:10px; color:var(--text-secondary); margin-top:2px; }
+.time-entry-hours { font-size:15px; font-weight:700; color:var(--accent); text-align:right; }
+.time-entry-date { font-size:9px; color:var(--text-secondary); text-align:right; }
 
-.op-seq {
-    width: 32px; height: 32px; border-radius: 8px;
-    background: var(--bg-tertiary);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 700; color: var(--text-primary); flex-shrink: 0;
-}
-.op-info { flex: 1; min-width: 0; }
-.op-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.op-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
-.op-meta span { margin-right: 8px; }
+.log-form { background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:14px; }
+.form-group { margin-bottom:10px; }
+.form-label { font-size:10px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:5px; display:block; }
+.form-select,.form-input { width:100%; padding:9px 10px; background:var(--bg-primary); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:13px; outline:none; }
+.form-select:focus,.form-input:focus { border-color:var(--accent); }
+.form-select option { background:var(--bg-primary); color:var(--text-primary); }
 
-.machine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px; }
+.stat-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:14px; text-align:center; }
+.stat-value { font-size:26px; font-weight:700; line-height:1; }
+.stat-value.accent { color:var(--accent); }
+.stat-value.success { color:var(--success); }
+.stat-label { font-size:10px; color:var(--text-secondary); margin-top:5px; text-transform:uppercase; }
 
-.machine-card {
-    background: var(--bg-secondary); border: 1px solid var(--border);
-    border-radius: 10px; padding: 14px 12px; cursor: pointer;
-    transition: all 0.2s; text-align: center;
-}
-.machine-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.machine-card.running { border-left: 4px solid var(--success); }
-.machine-card.idle { border-left: 4px solid var(--text-secondary); }
-.machine-card.maintenance { border-left: 4px solid var(--danger); }
+.profile-section { background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:10px; }
+.profile-row { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid var(--border); }
+.profile-row:last-child { border-bottom:none; }
+.profile-row-label { font-size:12px; color:var(--text-secondary); }
+.profile-row-value { font-size:12px; font-weight:600; }
 
-.machine-card-name { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
-.machine-card-number { font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; }
-.machine-card-job { font-size: 11px; color: var(--accent); margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,17,23,0.9); z-index:200; display:none; align-items:flex-end; justify-content:center; backdrop-filter:blur(4px); }
+.modal-overlay.active { display:flex; }
+.modal-sheet { background:var(--bg-secondary); border-radius:16px 16px 0 0; width:100%; max-width:560px; max-height:85vh; overflow-y:auto; padding:20px; animation:slideUp 0.3s ease; }
+@keyframes slideUp { from { transform:translateY(100%); } to { transform:translateY(0); } }
+.modal-handle { width:36px; height:4px; background:var(--bg-tertiary); border-radius:2px; margin:0 auto 14px; }
+.modal-title { font-size:17px; font-weight:700; margin-bottom:4px; }
+.modal-subtitle { font-size:12px; color:var(--text-secondary); margin-bottom:14px; }
 
-.time-entry {
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px; background: var(--bg-secondary);
-    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
-}
-.time-entry-icon { width: 36px; height: 36px; border-radius: 8px; background: rgba(59,130,246,0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 18px; color: var(--accent); }
-.time-entry-info { flex: 1; }
-.time-entry-job { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.time-entry-detail { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
-.time-entry-hours { font-size: 16px; font-weight: 700; color: var(--accent); text-align: right; }
-.time-entry-date { font-size: 10px; color: var(--text-secondary); text-align: right; }
+.routing-step { display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+.routing-step:last-child { border-bottom:none; }
+.routing-dot { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex-shrink:0; }
+.routing-dot.complete { background:var(--success); color:white; }
+.routing-dot.in_progress { background:var(--accent); color:white; }
+.routing-dot.queued,.routing-dot.pending,.routing-dot.assigned { background:var(--bg-tertiary); color:var(--text-secondary); }
+.routing-dot.pending_review { background:var(--warning); color:#000; }
+.routing-info { flex:1; }
+.routing-wc { font-size:12px; font-weight:600; }
+.routing-desc { font-size:11px; color:var(--text-secondary); margin-top:2px; }
 
-.log-form { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-.form-group { margin-bottom: 12px; }
-.form-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
-.form-select, .form-input {
-    width: 100%; padding: 10px 12px;
-    background: var(--bg-primary); border: 1px solid var(--border);
-    border-radius: 8px; color: var(--text-primary); font-size: 14px; outline: none;
-}
-.form-select:focus, .form-input:focus { border-color: var(--accent); }
-.form-select option { background: var(--bg-primary); color: var(--text-primary); }
+.status-options { display:flex; flex-direction:column; gap:8px; margin:14px 0; }
+.status-option { display:flex; align-items:center; gap:12px; padding:12px 14px; background:var(--bg-primary); border:2px solid var(--border); border-radius:10px; cursor:pointer; }
+.status-option:hover { border-color:var(--accent); }
+.status-option.selected { border-color:var(--accent); background:rgba(59,130,246,0.05); }
+.status-option-dot { width:12px; height:12px; border-radius:50%; }
+.status-option-label { font-size:13px; font-weight:600; }
 
-.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-.stat-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
-.stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); line-height: 1; }
-.stat-value.accent { color: var(--accent); }
-.stat-value.success { color: var(--success); }
-.stat-label { font-size: 11px; color: var(--text-secondary); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
+.empty-state { text-align:center; padding:30px 20px; color:var(--text-secondary); }
+.loading { text-align:center; padding:30px; color:var(--text-secondary); }
+.spinner { width:28px; height:28px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 10px; }
+@keyframes spin { to { transform:rotate(360deg); } }
 
-.profile-section { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 12px; }
-.profile-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); }
-.profile-row:last-child { border-bottom: none; }
-.profile-row-label { font-size: 13px; color: var(--text-secondary); }
-.profile-row-value { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.toast { position:fixed; top:66px; left:50%; transform:translateX(-50%); background:var(--bg-secondary); border:1px solid var(--border); padding:10px 20px; border-radius:8px; font-size:13px; font-weight:500; z-index:300; opacity:0; transition:opacity 0.3s; box-shadow:0 4px 20px rgba(0,0,0,0.4); }
+.toast.success { border-color:var(--success); }
+.toast.error { border-color:var(--danger); }
+.toast.show { opacity:1; }
 
-.modal-overlay {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(15,17,23,0.9); z-index: 200; display: none;
-    align-items: flex-end; justify-content: center; backdrop-filter: blur(4px);
-}
-.modal-overlay.active { display: flex; }
+.dashboard-link { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; margin-top:8px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; color:var(--accent); text-decoration:none; font-size:13px; font-weight:600; }
 
-.modal-sheet {
-    background: var(--bg-secondary); border-radius: 16px 16px 0 0;
-    width: 100%; max-width: 600px; max-height: 85vh;
-    overflow-y: auto; padding: 20px; animation: slideUp 0.3s ease;
-}
-@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.add-btn { background:var(--accent); color:white; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; }
 
-.modal-handle { width: 36px; height: 4px; background: var(--bg-tertiary); border-radius: 2px; margin: 0 auto 16px; }
-.modal-title { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
-.modal-subtitle { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
-
-.routing-step { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
-.routing-step:last-child { border-bottom: none; }
-.routing-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
-.routing-dot.complete { background: var(--success); color: white; }
-.routing-dot.in_progress { background: var(--accent); color: white; }
-.routing-dot.queued, .routing-dot.pending { background: var(--bg-tertiary); color: var(--text-secondary); }
-.routing-info { flex: 1; }
-.routing-wc { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.routing-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-.routing-hours { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
-
-.status-options { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
-.status-option {
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 16px; background: var(--bg-primary);
-    border: 2px solid var(--border); border-radius: 10px; cursor: pointer; transition: all 0.2s;
-}
-.status-option:hover { border-color: var(--accent); }
-.status-option.selected { border-color: var(--accent); background: rgba(59,130,246,0.05); }
-.status-option-dot { width: 12px; height: 12px; border-radius: 50%; }
-.status-option-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-
-.empty-state { text-align: center; padding: 40px 20px; color: var(--text-secondary); }
-.empty-state p { font-size: 14px; }
-
-.loading { text-align: center; padding: 40px; color: var(--text-secondary); }
-.spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.toast {
-    position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
-    background: var(--bg-secondary); border: 1px solid var(--border);
-    padding: 10px 20px; border-radius: 8px;
-    font-size: 13px; font-weight: 500; color: var(--text-primary);
-    z-index: 300; opacity: 0; transition: opacity 0.3s;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-}
-.toast.success { border-color: var(--success); }
-.toast.error { border-color: var(--danger); }
-.toast.show { opacity: 1; }
-
-.dashboard-link {
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    padding: 12px; margin-top: 8px;
-    background: var(--bg-secondary); border: 1px solid var(--border);
-    border-radius: 10px; color: var(--accent);
-    text-decoration: none; font-size: 13px; font-weight: 600;
-}
-.dashboard-link:hover { background: rgba(59,130,246,0.05); }
-
-@media (min-width: 768px) {
-    .main-content { max-width: 600px; margin: 0 auto; }
-    .bottom-tabs { max-width: 600px; margin: 0 auto; left: 50%; transform: translateX(-50%); }
-}
+@media (min-width:768px) { .main-content { max-width:640px; margin:0 auto; } .bottom-tabs { max-width:640px; left:50%; transform:translateX(-50%); } }
     </style>
 </head>
 <body>
@@ -870,128 +1082,183 @@ html, body {
         <div class="header-avatar" id="userAvatar">?</div>
         <div class="header-info">
             <h1 id="userName">Loading...</h1>
-            <p id="userRole">SVEM Employee Portal</p>
+            <p id="userRole">SVEM</p>
         </div>
     </div>
-    <button class="clock-btn clock-in" id="clockBtn" onclick="toggleClock()">Clock In</button>
+    <div class="header-right">
+        <span class="role-badge employee" id="roleBadge">EMPLOYEE</span>
+        <button class="clock-btn clock-in" id="clockBtn" onclick="toggleClock()">Clock In</button>
+    </div>
 </div>
 
 <div class="main-content">
+    <!-- MY TASKS -->
     <div class="tab-content active" id="tab-tasks">
         <div id="activeTaskArea"></div>
         <div class="section-header">My Operations</div>
-        <div id="myOperations"><div class="loading"><div class="spinner"></div>Loading tasks...</div></div>
+        <div id="myOperations"><div class="loading"><div class="spinner"></div>Loading...</div></div>
     </div>
 
-    <div class="tab-content" id="tab-machines">
+    <!-- TEAM (Manager) -->
+    <div class="tab-content mgr-only" id="tab-team">
         <div class="section-header">
-            Shop Floor Machines
-            <span id="machineCount" style="font-size:11px;font-weight:400;"></span>
+            My Team <span id="teamCount" style="font-size:11px;font-weight:400;"></span>
+            <button class="add-btn" onclick="showAddStaff()">+ Add Staff</button>
         </div>
-        <div id="machineList"><div class="loading"><div class="spinner"></div>Loading machines...</div></div>
+        <div id="teamList"><div class="loading"><div class="spinner"></div>Loading team...</div></div>
     </div>
 
+    <!-- ASSIGN (Manager) -->
+    <div class="tab-content mgr-only" id="tab-assign">
+        <div class="section-header">
+            Assign Operations <span id="unassignedCount" style="font-size:11px;font-weight:400;"></span>
+        </div>
+        <div id="unassignedOps"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+    </div>
+
+    <!-- REVIEW (Manager) -->
+    <div class="tab-content mgr-only" id="tab-review">
+        <div class="section-header">
+            Review Work <span id="reviewCount" style="font-size:11px;font-weight:400;"></span>
+        </div>
+        <div id="reviewList"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+    </div>
+
+    <!-- MACHINES -->
+    <div class="tab-content" id="tab-machines">
+        <div class="section-header">Machines <span id="machineCount" style="font-size:11px;font-weight:400;"></span></div>
+        <div id="machineList"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+    </div>
+
+    <!-- TIME LOG -->
     <div class="tab-content" id="tab-time">
         <div class="section-header">Log Hours</div>
-        <div class="log-form" id="logForm">
+        <div class="log-form">
             <div class="form-group">
                 <label class="form-label">Operation</label>
-                <select class="form-select" id="logOperation">
-                    <option value="">Select an operation...</option>
-                </select>
+                <select class="form-select" id="logOperation"><option value="">Select...</option></select>
             </div>
             <div class="form-group">
-                <label class="form-label">Hours Worked</label>
-                <input type="number" class="form-input" id="logHours" placeholder="e.g. 2.5" step="0.25" min="0" max="24" />
+                <label class="form-label">Hours</label>
+                <input type="number" class="form-input" id="logHours" placeholder="2.5" step="0.25" min="0" max="24" />
             </div>
             <div class="form-group">
-                <label class="form-label">Notes (optional)</label>
-                <input type="text" class="form-input" id="logNotes" placeholder="What did you work on?" />
+                <label class="form-label">Notes</label>
+                <input type="text" class="form-input" id="logNotes" placeholder="Optional notes..." />
             </div>
-            <button class="action-btn primary full" onclick="submitTimeLog()" style="margin-top:4px;">Log Hours</button>
+            <button class="action-btn primary full" onclick="submitTimeLog()">Log Hours</button>
         </div>
-        <div class="section-header">Recent Time Entries</div>
-        <div id="timeEntries"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+        <div class="section-header">Recent Entries</div>
+        <div id="timeEntries"><div class="loading"><div class="spinner"></div></div></div>
     </div>
 
+    <!-- PROFILE -->
     <div class="tab-content" id="tab-profile">
         <div class="section-header">This Week</div>
-        <div class="stats-grid" id="weeklyStats">
-            <div class="stat-card"><div class="stat-value accent" id="statJobsCompleted">-</div><div class="stat-label">Jobs Completed</div></div>
+        <div class="stats-grid">
+            <div class="stat-card"><div class="stat-value accent" id="statJobsCompleted">-</div><div class="stat-label">Jobs Done</div></div>
             <div class="stat-card"><div class="stat-value success" id="statHoursLogged">-</div><div class="stat-label">Hours Logged</div></div>
-            <div class="stat-card"><div class="stat-value" id="statOpsCompleted">-</div><div class="stat-label">Ops Completed</div></div>
-            <div class="stat-card"><div class="stat-value" id="statCurrentStreak">-</div><div class="stat-label">Day Streak</div></div>
         </div>
-
         <div class="section-header">My Info</div>
-        <div class="profile-section" id="profileInfo">
+        <div class="profile-section">
             <div class="profile-row"><span class="profile-row-label">Employee ID</span><span class="profile-row-value" id="profileEmpId">--</span></div>
             <div class="profile-row"><span class="profile-row-label">Role</span><span class="profile-row-value" id="profileRole">--</span></div>
             <div class="profile-row"><span class="profile-row-label">Shift</span><span class="profile-row-value" id="profileShift">--</span></div>
             <div class="profile-row"><span class="profile-row-label">Status</span><span class="profile-row-value" id="profileStatus">--</span></div>
-            <div class="profile-row"><span class="profile-row-label">Current Machine</span><span class="profile-row-value" id="profileMachine">--</span></div>
+            <div class="profile-row"><span class="profile-row-label">Machine</span><span class="profile-row-value" id="profileMachine">--</span></div>
         </div>
-
-        <a href="/x_1964226_svem_com_dashboard.do" class="dashboard-link">
-            &#9638;&#9638; Open Ops Dashboard
-        </a>
+        <a href="/x_1964226_svem_com_dashboard.do" class="dashboard-link">&#9638;&#9638; Open Ops Dashboard</a>
     </div>
 </div>
 
-<div class="bottom-tabs">
-    <button class="tab-btn active" onclick="switchTab('tasks', this)">
+<!-- BOTTOM TABS -->
+<div class="bottom-tabs" id="bottomTabs" style="grid-template-columns:repeat(4,1fr);">
+    <button class="tab-btn active" onclick="switchTab('tasks',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-        My Tasks
+        Tasks
     </button>
-    <button class="tab-btn" onclick="switchTab('machines', this)">
+    <button class="tab-btn mgr-only" onclick="switchTab('team',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Team
+    </button>
+    <button class="tab-btn mgr-only" onclick="switchTab('assign',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+        Assign
+    </button>
+    <button class="tab-btn mgr-only" onclick="switchTab('review',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg>
+        Review
+    </button>
+    <button class="tab-btn" onclick="switchTab('machines',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="14" y1="12" x2="18" y2="12"/></svg>
         Machines
     </button>
-    <button class="tab-btn" onclick="switchTab('time', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-        Time Log
-    </button>
-    <button class="tab-btn" onclick="switchTab('profile', this)">
+    <button class="tab-btn" onclick="switchTab('profile',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         Profile
     </button>
 </div>
 
+<!-- MODALS -->
 <div class="modal-overlay" id="jobDetailModal" onclick="closeModal('jobDetailModal')">
     <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-handle"></div>
-        <div class="modal-title" id="modalJobNumber">JOB-0001</div>
+        <div class="modal-title" id="modalJobNumber"></div>
         <div class="modal-subtitle" id="modalJobInfo"></div>
         <div class="section-header">Job Routing</div>
         <div id="modalRouting"></div>
-        <div style="margin-top:16px;">
-            <button class="action-btn secondary full" onclick="closeModal('jobDetailModal')">Close</button>
-        </div>
+        <button class="action-btn secondary full" onclick="closeModal('jobDetailModal')" style="margin-top:14px;">Close</button>
     </div>
 </div>
 
 <div class="modal-overlay" id="machineModal" onclick="closeModal('machineModal')">
     <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-handle"></div>
-        <div class="modal-title" id="machineModalName">Machine</div>
+        <div class="modal-title" id="machineModalName"></div>
         <div class="modal-subtitle" id="machineModalInfo"></div>
-        <div class="section-header">Update Status</div>
         <div class="status-options">
-            <div class="status-option" onclick="selectMachineStatus('running', this)">
-                <div class="status-option-dot" style="background:#22C55E"></div>
-                <div class="status-option-label">Running</div>
-            </div>
-            <div class="status-option" onclick="selectMachineStatus('idle', this)">
-                <div class="status-option-dot" style="background:#8B8D97"></div>
-                <div class="status-option-label">Idle</div>
-            </div>
-            <div class="status-option" onclick="selectMachineStatus('maintenance', this)">
-                <div class="status-option-dot" style="background:#EF4444"></div>
-                <div class="status-option-label">Maintenance</div>
-            </div>
+            <div class="status-option" onclick="selectMachineStatus('running',this)"><div class="status-option-dot" style="background:#22C55E"></div><div class="status-option-label">Running</div></div>
+            <div class="status-option" onclick="selectMachineStatus('idle',this)"><div class="status-option-dot" style="background:#8B8D97"></div><div class="status-option-label">Idle</div></div>
+            <div class="status-option" onclick="selectMachineStatus('maintenance',this)"><div class="status-option-dot" style="background:#EF4444"></div><div class="status-option-label">Maintenance</div></div>
         </div>
         <button class="action-btn primary full" onclick="saveMachineStatus()">Save</button>
         <button class="action-btn secondary full" onclick="closeModal('machineModal')" style="margin-top:8px;">Cancel</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="addStaffModal" onclick="closeModal('addStaffModal')">
+    <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-handle"></div>
+        <div class="modal-title">Add Team Member</div>
+        <div class="modal-subtitle">Create a new staff record</div>
+        <div class="form-group">
+            <label class="form-label">Full Name *</label>
+            <input type="text" class="form-input" id="newStaffName" placeholder="John Smith" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">Role *</label>
+            <select class="form-select" id="newStaffRole">
+                <option value="">Select role...</option>
+                <option value="operator">Operator</option>
+                <option value="setup_operator">Setup Operator</option>
+                <option value="qc_technician">QC Technician</option>
+                <option value="programmer">Programmer</option>
+                <option value="deburr_operator">Deburr Operator</option>
+                <option value="material_handler">Material Handler</option>
+                <option value="driver">Driver</option>
+                <option value="shipping_technician">Shipping Tech</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Shift</label>
+            <select class="form-select" id="newStaffShift">
+                <option value="day">Day</option>
+                <option value="night">Night</option>
+                <option value="swing">Swing</option>
+            </select>
+        </div>
+        <button class="action-btn success full" onclick="createStaffMember()" style="margin-top:4px;">Create Staff Member</button>
+        <button class="action-btn secondary full" onclick="closeModal('addStaffModal')" style="margin-top:8px;">Cancel</button>
     </div>
 </div>
 
@@ -1005,13 +1272,13 @@ html, body {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-12 23:50:00</sys_created_on>
         <sys_id>a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5e7</sys_id>
-        <sys_mod_count>1</sys_mod_count>
+        <sys_mod_count>2</sys_mod_count>
         <sys_name>employee_portal</sys_name>
         <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
         <sys_policy/>
         <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
         <sys_update_name>sys_ui_page_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5e7</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-04-12 23:55:00</sys_updated_on>
+        <sys_updated_on>2026-04-13 00:10:00</sys_updated_on>
     </sys_ui_page>
 </record_update>
