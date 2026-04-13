@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><database>
     <element db_object_id="a8b47c9893500310414ef2375d03d60d" label="Jobs" max_length="40" name="x_1964226_svem_com_jobs" type="collection">
         <element function_definition="glidefunction:datediff(ship_by_date, gs.nowDateTime())" function_field="true" label="Days Until Due" max_length="40" name="days_until_due" read_only="true" type="integer"/>
-        <element attributes="edge_encryption_enabled=true" display="true" label="Job Number" mandatory="true" max_length="40" name="job_number" type="string" unique="true"/>
+        <element attributes="edge_encryption_enabled=true" display="true" label="Job Number" max_length="40" name="job_number" read_only="true" type="string" unique="true"/>
         <element choice="1" default="not_started" label="Job Status" max_length="40" name="job_status" type="choice">
             <choice>
                 <element inactive_on_update="false" label="In Progress" sequence="1" value="in_progress"/>
@@ -23,7 +23,7 @@
                 <element inactive_on_update="false" label="Medium" sequence="2" value="medium"/>
             </choice>
         </element>
-        <element attributes="edge_encryption_enabled=true" label="PO Number" mandatory="true" max_length="50" name="po_number" type="string"/>
+        <element attributes="edge_encryption_enabled=true" label="PO Number" max_length="50" name="po_number" read_only="true" type="string"/>
         <element choice="1" label="Ship Status" max_length="40" name="ship_status" type="choice">
             <choice>
                 <element inactive_on_update="false" label="Shipped" sequence="3" value="shipped"/>
