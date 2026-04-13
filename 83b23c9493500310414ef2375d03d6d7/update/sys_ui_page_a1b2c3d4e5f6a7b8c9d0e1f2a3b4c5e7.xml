@@ -161,7 +161,7 @@ function loadAllStaff() {
 function loadAllOperations() {
     return apiGet('x_1964226_svem_com_operations', {
         sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,job,sequence,work_center,description,op_status,preferred_machine,completed_by,started_date,completed_date,estimated_hours,actual_hours,process_name,notes',
+        sysparm_fields: 'sys_id,job,sequence,work_center,description,op_status,preferred_machine,completed_by,assigned_to,started_date,completed_date,estimated_hours,actual_hours,process_name,notes',
         sysparm_query: 'ORDERBYsequence',
         sysparm_limit: '500'
     }).then(function(ops) { allOperations = ops; });
@@ -185,13 +185,13 @@ function loadJobs() {
 
 function filterMyOperations() {
     if (!staffRecord) { myOperations = allOperations; return; }
-    var myName = ev(staffRecord.name);
     var mySysId = eid(staffRecord.sys_id);
+    var myName = ev(staffRecord.name);
     myOperations = [];
     for (var i = 0; i < allOperations.length; i++) {
-        var assignee = ev(allOperations[i].completed_by);
-        // Show ops assigned to me, or unassigned ops if employee
-        if (assignee === myName || eid(allOperations[i].completed_by) === mySysId) {
+        var assignedId = eid(allOperations[i].assigned_to);
+        var assignedName = ev(allOperations[i].assigned_to);
+        if (assignedId === mySysId || assignedName === myName) {
             myOperations.push(allOperations[i]);
         }
     }
@@ -236,14 +236,12 @@ function renderTasks() {
     }
 
     // Group by status for staged view
-    var staged = { assigned: [], queued: [], on_hold: [], pending_review: [] };
+    var staged = { assigned: [], pending: [], pending_review: [] };
     for (var j = 0; j < myOperations.length; j++) {
         var st = ev(myOperations[j].op_status);
-        if (st === 'in_progress') continue;
-        if (st === 'complete') continue;
+        if (st === 'in_progress' || st === 'complete' || st === 'skipped') continue;
         if (staged[st]) staged[st].push(myOperations[j]);
-        else if (st === 'pending_review') staged.pending_review.push(myOperations[j]);
-        else staged.queued.push(myOperations[j]);
+        else staged.pending.push(myOperations[j]);
     }
 
     var html = '';
@@ -254,22 +252,16 @@ function renderTasks() {
         html += renderOpList(staged.pending_review, false);
     }
 
-    // On hold / rejected
-    if (staged.on_hold.length > 0) {
-        html += '<div class="stage-label hold">&#9888; On Hold / Needs Attention (' + staged.on_hold.length + ')</div>';
-        html += renderOpList(staged.on_hold, true);
-    }
-
-    // Assigned to me
+    // Assigned to me - ready to start
     if (staged.assigned.length > 0) {
         html += '<div class="stage-label assigned">&#128204; Assigned to You (' + staged.assigned.length + ')</div>';
         html += renderOpList(staged.assigned, true);
     }
 
-    // Queued
-    if (staged.queued.length > 0) {
-        html += '<div class="stage-label queued">&#128203; Queued (' + staged.queued.length + ')</div>';
-        html += renderOpList(staged.queued, true);
+    // Pending (unassigned)
+    if (staged.pending.length > 0) {
+        html += '<div class="stage-label queued">&#128203; Pending (' + staged.pending.length + ')</div>';
+        html += renderOpList(staged.pending, false);
     }
 
     if (html === '' && !activeOp) {
@@ -288,7 +280,7 @@ function renderOpList(ops, canStart) {
         var wcn = ev(op.work_center) || ev(op.process_name) || '--';
         var estH = ev(op.estimated_hours);
         var sid = eid(op.sys_id);
-        var assignee = ev(op.completed_by);
+        var assignee = ev(op.assigned_to);
 
         html += '<div class="op-item" onclick="' + (canStart ? 'showOperationActions(\'' + sid + '\')' : 'openJobDetail2(\'' + sid + '\')') + '">' +
             '<div class="op-seq">' + ev(op.sequence) + '</div>' +
@@ -375,69 +367,181 @@ function renderTeam() {
     container.innerHTML = html;
 }
 
-// ---- RENDER: ASSIGN WORK (Manager Only) ----
+// ---- RENDER: ASSIGN WORK (Manager Only) - Staff-First Picker ----
+var selectedAssignStaff = null;
+
 function renderAssignments() {
-    var container = document.getElementById('unassignedOps');
-    if (!container) return;
+    var picker = document.getElementById('staffPicker');
+    if (!picker) return;
 
-    // Find unassigned operations (no completed_by and not complete)
-    var unassigned = [];
+    // Count unassigned
+    var unassignedCount = 0;
     for (var i = 0; i < allOperations.length; i++) {
-        var op = allOperations[i];
-        if (ev(op.op_status) === 'complete') continue;
-        if (!ev(op.completed_by)) unassigned.push(op);
+        var st = ev(allOperations[i].op_status);
+        if (st === 'pending' && !ev(allOperations[i].assigned_to)) unassignedCount++;
     }
+    document.getElementById('unassignedCount').innerHTML = unassignedCount + ' unassigned';
 
-    document.getElementById('unassignedCount').innerHTML = unassigned.length + ' unassigned';
-
-    if (unassigned.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>All operations are assigned!</p></div>';
-        return;
-    }
-
+    // Render staff chips
     var html = '';
-    for (var j = 0; j < unassigned.length; j++) {
-        var op = unassigned[j];
-        var jn = ev(op.job);
-        var wc = ev(op.work_center) || ev(op.process_name) || '--';
-        var est = ev(op.estimated_hours);
-        var sid = eid(op.sys_id);
-
-        html += '<div class="assign-item">' +
-            '<div class="assign-info">' +
-                '<div class="op-seq">' + ev(op.sequence) + '</div>' +
-                '<div class="op-info">' +
-                    '<div class="op-name">' + escHtml(wc).toUpperCase() + '</div>' +
-                    '<div class="op-meta"><span>' + escHtml(jn) + '</span>' + (est ? '<span>' + est + 'h</span>' : '') + '</div>' +
-                '</div>' +
-            '</div>' +
-            '<div class="assign-action">' +
-                '<select class="form-select assign-select" id="assign_' + sid + '">' +
-                    '<option value="">Assign to...</option>' +
-                    staffOptions() +
-                '</select>' +
-                '<button class="action-btn primary assign-btn" onclick="assignOperation(\'' + sid + '\')">Assign</button>' +
-            '</div>' +
+    for (var j = 0; j < allStaff.length; j++) {
+        var s = allStaff[j];
+        var sid = eid(s.sys_id);
+        var name = ev(s.name);
+        var status = ev(s.status);
+        var workCount = countStaffOps(sid);
+        html += '<div class="staff-chip' + (selectedAssignStaff === sid ? ' selected' : '') + '" id="chip_' + sid + '" onclick="selectStaffForAssign(\'' + sid + '\')">' +
+            '<div class="chip-avatar">' + (name ? name.charAt(0).toUpperCase() : '?') + '</div>' +
+            '<div><div class="chip-name">' + escHtml(name) + '</div>' +
+            '<div class="chip-meta">' + workCount + ' ops &bull; ' + status + '</div></div>' +
         '</div>';
     }
-    container.innerHTML = html;
+    picker.innerHTML = html;
+
+    // Auto-select first staff if none selected
+    if (!selectedAssignStaff && allStaff.length > 0) {
+        var first = allStaff[0];
+        for (var k = 0; k < allStaff.length; k++) {
+            if (ev(allStaff[k].status) === 'available') { first = allStaff[k]; break; }
+        }
+        selectStaffForAssign(eid(first.sys_id));
+    } else if (selectedAssignStaff) {
+        renderAssignDashboard(selectedAssignStaff);
+    }
 }
 
-function staffOptions() {
-    var html = '';
-    var available = [];
-    for (var i = 0; i < allStaff.length; i++) {
-        var s = ev(allStaff[i].status);
-        if (s !== 'off') available.push(allStaff[i]);
+function countStaffOps(staffSysId) {
+    var count = 0;
+    for (var i = 0; i < allOperations.length; i++) {
+        var aId = eid(allOperations[i].assigned_to);
+        var st = ev(allOperations[i].op_status);
+        if (aId === staffSysId && st !== 'complete' && st !== 'skipped') count++;
     }
-    // Sort available first
-    for (var j = 0; j < allStaff.length; j++) {
-        var name = ev(allStaff[j].name);
-        var role = ev(allStaff[j].role);
-        var sid = eid(allStaff[j].sys_id);
-        html += '<option value="' + sid + '">' + escHtml(name) + ' (' + formatRole(role) + ')</option>';
+    return count;
+}
+
+function selectStaffForAssign(sysId) {
+    selectedAssignStaff = sysId;
+    var chips = document.querySelectorAll('.staff-chip');
+    for (var i = 0; i < chips.length; i++) {
+        if (chips[i].id === 'chip_' + sysId) {
+            chips[i].className = 'staff-chip selected';
+        } else {
+            chips[i].className = 'staff-chip';
+        }
+    }
+    renderAssignDashboard(sysId);
+}
+
+function renderAssignDashboard(staffSysId) {
+    var dashboard = document.getElementById('assignDashboard');
+    if (!dashboard) return;
+
+    // Find staff name
+    var staffName = '';
+    for (var n = 0; n < allStaff.length; n++) {
+        if (eid(allStaff[n].sys_id) === staffSysId) { staffName = ev(allStaff[n].name); break; }
+    }
+
+    // Left: this staff's current work
+    var theirOps = [];
+    for (var i = 0; i < allOperations.length; i++) {
+        var aId = eid(allOperations[i].assigned_to);
+        var st = ev(allOperations[i].op_status);
+        if (aId === staffSysId && st !== 'complete' && st !== 'skipped') theirOps.push(allOperations[i]);
+    }
+
+    // Right: unassigned operations (pending, no assigned_to)
+    var available = [];
+    for (var j = 0; j < allOperations.length; j++) {
+        var op = allOperations[j];
+        if (ev(op.op_status) === 'pending' && !ev(op.assigned_to)) available.push(op);
+    }
+
+    var leftHtml = '<div class="assign-col-header">' + escHtml(staffName) + '\'s Work (' + theirOps.length + ')</div>';
+    if (theirOps.length === 0) {
+        leftHtml += '<div class="empty-state"><p>No current assignments</p></div>';
+    } else {
+        for (var k = 0; k < theirOps.length; k++) {
+            var o = theirOps[k];
+            var oSt = ev(o.op_status);
+            var oWc = ev(o.work_center) || ev(o.process_name) || '--';
+            leftHtml += '<div class="op-item" style="cursor:default;">' +
+                '<div class="op-seq">' + ev(o.sequence) + '</div>' +
+                '<div class="op-info">' +
+                    '<div class="op-name">' + escHtml(oWc).toUpperCase() + '</div>' +
+                    '<div class="op-meta"><span>' + escHtml(ev(o.job)) + '</span>' +
+                    (ev(o.estimated_hours) ? '<span>' + ev(o.estimated_hours) + 'h</span>' : '') + '</div>' +
+                '</div>' +
+                '<span class="badge ' + oSt + '">' + oSt.replace(/_/g, ' ') + '</span>' +
+            '</div>';
+        }
+    }
+
+    var rightHtml = '<div class="assign-col-header">Available Operations (' + available.length + ')</div>';
+    rightHtml += '<input type="text" class="assign-filter" id="opFilterInput" placeholder="Filter by job or work center..." oninput="filterAvailableOps()" />';
+    rightHtml += '<div id="availableOpsList">';
+    rightHtml += renderAvailableOps(available);
+    rightHtml += '</div>';
+
+    dashboard.innerHTML = '<div class="assign-split">' +
+        '<div class="assign-col">' + leftHtml + '</div>' +
+        '<div class="assign-col">' + rightHtml + '</div>' +
+    '</div>';
+}
+
+function renderAvailableOps(ops) {
+    if (ops.length === 0) return '<div class="empty-state"><p>All operations assigned!</p></div>';
+    var html = '';
+    for (var i = 0; i < ops.length; i++) {
+        var op = ops[i];
+        var wc = ev(op.work_center) || ev(op.process_name) || '--';
+        var jn = ev(op.job);
+        var est = ev(op.estimated_hours);
+        var sid = eid(op.sys_id);
+        html += '<div class="op-item assign-available-op">' +
+            '<div class="op-seq">' + ev(op.sequence) + '</div>' +
+            '<div class="op-info">' +
+                '<div class="op-name">' + escHtml(wc).toUpperCase() + '</div>' +
+                '<div class="op-meta"><span>' + escHtml(jn) + '</span>' + (est ? '<span>' + est + 'h</span>' : '') + '</div>' +
+            '</div>' +
+            '<button class="quick-assign-btn" onclick="quickAssign(\'' + sid + '\')">+ Assign</button>' +
+        '</div>';
     }
     return html;
+}
+
+function filterAvailableOps() {
+    var input = document.getElementById('opFilterInput');
+    var filter = input ? input.value.toLowerCase() : '';
+    var available = [];
+    for (var i = 0; i < allOperations.length; i++) {
+        var op = allOperations[i];
+        if (ev(op.op_status) !== 'pending' || ev(op.assigned_to)) continue;
+        if (filter) {
+            var jn = ev(op.job).toLowerCase();
+            var wc = (ev(op.work_center) || ev(op.process_name) || '').toLowerCase();
+            if (jn.indexOf(filter) === -1 && wc.indexOf(filter) === -1) continue;
+        }
+        available.push(op);
+    }
+    var list = document.getElementById('availableOpsList');
+    if (list) list.innerHTML = renderAvailableOps(available);
+}
+
+function quickAssign(opSysId) {
+    if (!selectedAssignStaff) { showToast('Select a staff member first', 'error'); return; }
+    var staffName = '';
+    for (var i = 0; i < allStaff.length; i++) {
+        if (eid(allStaff[i].sys_id) === selectedAssignStaff) { staffName = ev(allStaff[i].name); break; }
+    }
+    apiPatch('x_1964226_svem_com_operations', opSysId, {
+        assigned_to: selectedAssignStaff,
+        op_status: 'assigned'
+    }).then(function() {
+        showToast('Assigned to ' + staffName, 'success');
+        return refreshAll();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
 // ---- RENDER: REVIEW (Manager Only) ----
@@ -467,7 +571,7 @@ function renderReview() {
             var op = pending[j];
             var jn = ev(op.job);
             var wc = ev(op.work_center) || ev(op.process_name);
-            var assignee = ev(op.completed_by);
+            var assignee = ev(op.assigned_to) || ev(op.completed_by);
             var actual = ev(op.actual_hours);
             var sid = eid(op.sys_id);
 
@@ -609,8 +713,10 @@ function showOperationActions(sysId) {
     var op = findOp(sysId);
     if (!op) return;
     var status = ev(op.op_status);
-    if (status === 'queued' || status === 'pending' || status === 'assigned' || status === 'on_hold') {
+    if (status === 'assigned') {
         if (confirm('Start working on this operation?')) startOperation(sysId);
+    } else if (status === 'pending') {
+        showToast('This operation needs to be assigned first', 'error');
     }
 }
 
@@ -619,7 +725,6 @@ function startOperation(sysId) {
         op_status: 'in_progress',
         started_date: nowStr()
     };
-    if (staffRecord) patchData.completed_by = eid(staffRecord.sys_id);
     apiPatch('x_1964226_svem_com_operations', sysId, patchData)
     .then(function() {
         showToast('Operation started!', 'success');
@@ -628,7 +733,7 @@ function startOperation(sysId) {
 }
 
 function pauseOperation(sysId) {
-    apiPatch('x_1964226_svem_com_operations', sysId, { op_status: 'on_hold' })
+    apiPatch('x_1964226_svem_com_operations', sysId, { op_status: 'assigned' })
     .then(function() {
         showToast('Operation paused', 'success');
         return refreshAll();
@@ -648,19 +753,9 @@ function submitForReview(sysId) {
     }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
-// -- Manager: assign --
+// -- Manager: assign (legacy wrapper) --
 function assignOperation(opSysId) {
-    var select = document.getElementById('assign_' + opSysId);
-    var staffSysId = select ? select.value : '';
-    if (!staffSysId) { showToast('Select a team member', 'error'); return; }
-
-    apiPatch('x_1964226_svem_com_operations', opSysId, {
-        completed_by: staffSysId,
-        op_status: 'assigned'
-    }).then(function() {
-        showToast('Operation assigned!', 'success');
-        return refreshAll();
-    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
+    quickAssign(opSysId);
 }
 
 // -- Manager: approve/reject --
@@ -678,7 +773,7 @@ function approveOperation(sysId) {
 function rejectOperation(sysId) {
     var reason = prompt('Reason for rejection (optional):');
     apiPatch('x_1964226_svem_com_operations', sysId, {
-        op_status: 'on_hold',
+        op_status: 'assigned',
         notes: reason ? 'REJECTED: ' + reason : 'REJECTED - Needs rework'
     }).then(function() {
         showToast('Operation rejected and sent back', 'success');
@@ -1134,13 +1229,22 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
 .team-empid { font-size:11px; color:var(--text-secondary); font-weight:400; }
 .team-meta { font-size:11px; color:var(--text-secondary); margin-top:2px; }
 
-/* Assign work */
-.assign-item { background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:8px; }
-.assign-info { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.assign-action { display:flex; gap:8px; }
-.assign-select { flex:1; padding:8px; background:var(--bg-primary); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:12px; }
-.assign-select option { background:var(--bg-primary); }
-.assign-btn { padding:8px 16px; font-size:12px; white-space:nowrap; }
+/* Staff-first assignment picker */
+.staff-picker { display:flex; gap:8px; overflow-x:auto; padding:4px 0 12px; -webkit-overflow-scrolling:touch; }
+.staff-picker::-webkit-scrollbar { display:none; }
+.staff-chip { flex-shrink:0; display:flex; align-items:center; gap:8px; padding:8px 14px; background:var(--bg-secondary); border:2px solid var(--border); border-radius:20px; cursor:pointer; transition:all 0.2s; }
+.staff-chip.selected { border-color:var(--accent); background:rgba(59,130,246,0.1); }
+.chip-avatar { width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; flex-shrink:0; }
+.chip-name { font-size:12px; font-weight:600; color:var(--text-primary); white-space:nowrap; }
+.chip-meta { font-size:10px; color:var(--text-secondary); white-space:nowrap; }
+.assign-split { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.assign-col { background:var(--bg-secondary); border-radius:10px; padding:12px; max-height:55vh; overflow-y:auto; }
+.assign-col-header { font-size:13px; font-weight:600; margin-bottom:10px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; }
+.assign-filter { width:100%; padding:8px 10px; background:var(--bg-primary); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:12px; margin-bottom:8px; }
+.quick-assign-btn { padding:6px 12px; font-size:11px; font-weight:600; background:var(--accent); color:#fff; border:none; border-radius:6px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.quick-assign-btn:active { background:var(--accent-hover); }
+.assign-available-op { display:flex; align-items:center; }
+@media (max-width:600px) { .assign-split { grid-template-columns:1fr; } }
 
 /* Review cards */
 .review-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:8px; }
@@ -1294,12 +1398,13 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
         <div id="teamList"><div class="loading"><div class="spinner"></div>Loading team...</div></div>
     </div>
 
-    <!-- ASSIGN (Manager) -->
+    <!-- ASSIGN (Manager) - Staff-First Picker -->
     <div class="tab-content mgr-only" id="tab-assign">
         <div class="section-header">
-            Assign Operations <span id="unassignedCount" style="font-size:11px;font-weight:400;"></span>
+            Assign Work <span id="unassignedCount" style="font-size:11px;font-weight:400;"></span>
         </div>
-        <div id="unassignedOps"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+        <div class="staff-picker" id="staffPicker"><div class="loading"><div class="spinner"></div>Loading staff...</div></div>
+        <div id="assignDashboard"></div>
     </div>
 
     <!-- REVIEW (Manager) -->

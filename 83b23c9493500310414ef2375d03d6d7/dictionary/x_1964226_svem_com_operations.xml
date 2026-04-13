@@ -32,15 +32,21 @@
         <element label="Setup Hours" max_length="20" name="setup_hours" type="decimal"/>
         <element choice="1" default="pending" label="Operation Status" max_length="40" name="op_status" type="choice">
             <choice>
-                <element inactive_on_update="false" label="Skipped" sequence="3" value="skipped"/>
                 <element inactive_on_update="false" label="Pending" sequence="0" value="pending"/>
-                <element inactive_on_update="false" label="In Progress" sequence="1" value="in_progress"/>
-                <element inactive_on_update="false" label="Complete" sequence="2" value="complete"/>
+                <element inactive_on_update="false" label="Assigned" sequence="1" value="assigned"/>
+                <element inactive_on_update="false" label="In Progress" sequence="2" value="in_progress"/>
+                <element inactive_on_update="false" label="Pending Review" sequence="3" value="pending_review"/>
+                <element inactive_on_update="false" label="Complete" sequence="4" value="complete"/>
+                <element inactive_on_update="false" label="Skipped" sequence="5" value="skipped"/>
             </choice>
         </element>
+        <element attributes="encode_utf8=false" label="Assigned To" max_length="32" name="assigned_to" reference="x_1964226_svem_com_staff" type="reference"/>
         <element attributes="encode_utf8=false" label="Job" mandatory="true" max_length="32" name="job" reference="x_1964226_svem_com_jobs" type="reference"/>
         <index name="index">
             <element name="completed_by"/>
+        </index>
+        <index name="index4">
+            <element name="assigned_to"/>
         </index>
         <index name="index2">
             <element name="job"/>
