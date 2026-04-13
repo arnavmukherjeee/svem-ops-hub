@@ -4,7 +4,7 @@
         <can_delegate>true</can_delegate>
         <description>Full access to all SVEM Command Center features and data</description>
         <elevated_privilege>false</elevated_privilege>
-        <federated_id/>
+        <federated_id>hp9wzRTAtZs5T/gJb4rElq249jGSQDRiH1iHwc0udrQ=</federated_id>
         <grantable>true</grantable>
         <includes_roles/>
         <name>x_1964226_svem_com.admin</name>
