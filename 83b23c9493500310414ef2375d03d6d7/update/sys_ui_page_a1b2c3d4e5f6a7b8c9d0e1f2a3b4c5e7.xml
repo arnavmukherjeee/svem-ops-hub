@@ -4,7 +4,7 @@
         <client_script/>
         <description>SVEM Employee Portal - Shop Floor Worker View</description>
         <direct>true</direct>
-        <endpoint>x_1964226_svem_com_employee_portal.do</endpoint>
+        <endpoint>x_1964226_svem_com_x_1964226_svem_com_employee_portal.do</endpoint>
         <html><![CDATA[<html>
 <head>
     <title>SVEM Employee Portal</title>
