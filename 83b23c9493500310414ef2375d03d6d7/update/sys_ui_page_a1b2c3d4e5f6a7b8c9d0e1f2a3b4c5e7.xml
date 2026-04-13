@@ -203,9 +203,13 @@ function renderTasks() {
         var jobNum = ev(activeJob.job_number);
         var pri = ev(activeJob.priority);
         var jobSysId = eid(activeJob.sys_id);
+        var activeNotes = ev(activeJob.notes);
+        var activePrev = activeNotes ? (activeNotes.length > 120 ? activeNotes.substring(0, 120) + '...' : activeNotes) : '';
+        var activeCust = ev(activeJob.customer);
         activeArea.innerHTML = '<div class="active-task">' +
             '<div class="active-task-label">&#9654; Currently Working On</div>' +
-            '<div class="active-task-job">' + escHtml(jobNum) + '</div>' +
+            '<div class="active-task-job">' + escHtml(jobNum) + (activeCust ? ' <span style="font-size:13px;font-weight:400;opacity:0.7;">- ' + escHtml(activeCust) + '</span>' : '') + '</div>' +
+            (activePrev ? '<div style="font-size:12px;color:var(--text-secondary);margin:-4px 0 6px;line-height:1.3;">' + escHtml(activePrev) + '</div>' : '') +
             '<div class="active-task-op">' + escHtml(ev(activeJob.po_number)) + ' &bull; Priority: ' + escHtml(pri).toUpperCase() + ' &bull; Qty: ' + ev(activeJob.quantity_due) + '</div>' +
             '<div class="active-task-timer" id="taskTimer">00:00:00</div>' +
             '<div class="active-task-actions">' +
@@ -263,7 +267,10 @@ function renderJobList(jobs, canStart) {
         var qty = ev(job.quantity_due);
         var dueDate = ev(job.customer_due_date);
         var assignee = ev(job.assigned_to);
+        var customerName = ev(job.customer);
+        var notes = ev(job.notes);
         var sid = eid(job.sys_id);
+        var preview = notes ? (notes.length > 80 ? notes.substring(0, 80) + '...' : notes) : '';
 
         var priClass = pri === 'critical' ? 'danger' : (pri === 'high' ? 'warning' : '');
         html += '<div class="op-item">' +
@@ -272,7 +279,8 @@ function renderJobList(jobs, canStart) {
                  pri === 'high' ? 'background:rgba(245,158,11,0.2);color:#F59E0B;' : '') + '">' +
                 escHtml(pri ? pri.charAt(0).toUpperCase() : '?') + '</div>' +
             '<div class="op-info">' +
-                '<div class="op-name">' + escHtml(jobNum) + '</div>' +
+                '<div class="op-name">' + escHtml(jobNum) + (customerName ? ' <span style="color:var(--text-secondary);font-weight:400;font-size:11px;">- ' + escHtml(customerName) + '</span>' : '') + '</div>' +
+                (preview ? '<div class="op-preview">' + escHtml(preview) + '</div>' : '') +
                 '<div class="op-meta">' +
                     '<span>' + escHtml(poNum) + '</span>' +
                     '<span>Qty: ' + qty + '</span>' +
@@ -433,12 +441,19 @@ function renderAssignDashboard(staffSysId) {
         if (aId === staffSysId && st !== 'complete' && st !== 'shipped') theirJobs.push(allJobs[i]);
     }
 
-    // Right: unassigned jobs
+    // Right: unassigned jobs + jobs assigned to OTHER staff
     var available = [];
+    var othersJobs = [];
     for (var j = 0; j < allJobs.length; j++) {
         var jb = allJobs[j];
         var jSt = eid(jb.job_status);
-        if ((jSt === 'not_started') && !eid(jb.assigned_to)) available.push(jb);
+        var jAssigned = eid(jb.assigned_to);
+        if (jSt === 'complete' || jSt === 'shipped') continue;
+        if (!jAssigned || jSt === 'not_started' && !jAssigned) {
+            available.push(jb);
+        } else if (jAssigned && jAssigned !== staffSysId) {
+            othersJobs.push(jb);
+        }
     }
 
     var leftHtml = '<div class="assign-col-header">' + escHtml(staffName) + '\'s Jobs (' + theirJobs.length + ')</div>';
@@ -448,22 +463,31 @@ function renderAssignDashboard(staffSysId) {
         for (var k = 0; k < theirJobs.length; k++) {
             var o = theirJobs[k];
             var oSt = eid(o.job_status);
-            leftHtml += '<div class="op-item" style="cursor:default;">' +
+            var oNotes = ev(o.notes);
+            var oPrev = oNotes ? (oNotes.length > 60 ? oNotes.substring(0, 60) + '...' : oNotes) : '';
+            var oCustomer = ev(o.customer);
+            leftHtml += '<div class="op-item">' +
                 '<div class="op-seq">' + escHtml(ev(o.priority)).charAt(0).toUpperCase() + '</div>' +
                 '<div class="op-info">' +
-                    '<div class="op-name">' + escHtml(ev(o.job_number)) + '</div>' +
+                    '<div class="op-name">' + escHtml(ev(o.job_number)) + (oCustomer ? ' <span style="color:var(--text-secondary);font-weight:400;font-size:11px;">- ' + escHtml(oCustomer) + '</span>' : '') + '</div>' +
+                    (oPrev ? '<div class="op-preview">' + escHtml(oPrev) + '</div>' : '') +
                     '<div class="op-meta"><span>' + escHtml(ev(o.po_number)) + '</span><span>Qty: ' + ev(o.quantity_due) + '</span></div>' +
                 '</div>' +
+                '<button class="action-btn danger" style="padding:4px 10px;font-size:10px;margin-left:6px;" onclick="unassignJob(\'' + eid(o.sys_id) + '\')">Unassign</button>' +
                 '<span class="badge ' + oSt + '">' + oSt.replace(/_/g, ' ') + '</span>' +
             '</div>';
         }
     }
 
-    var rightHtml = '<div class="assign-col-header">Available Jobs (' + available.length + ')</div>';
+    var rightHtml = '<div class="assign-col-header">Unassigned (' + available.length + ')</div>';
     rightHtml += '<input type="text" class="assign-filter" id="jobFilterInput" placeholder="Filter by job or PO number..." oninput="filterAvailableJobs()" />';
     rightHtml += '<div id="availableJobsList">';
     rightHtml += renderAvailableJobs(available);
     rightHtml += '</div>';
+    if (othersJobs.length > 0) {
+        rightHtml += '<div class="assign-col-header" style="margin-top:16px;">Other Staff\'s Jobs (' + othersJobs.length + ')</div>';
+        rightHtml += renderOthersJobs(othersJobs);
+    }
 
     dashboard.innerHTML = '<div class="assign-split">' +
         '<div class="assign-col">' + leftHtml + '</div>' +
@@ -478,17 +502,46 @@ function renderAvailableJobs(jobs) {
         var jb = jobs[i];
         var sid = eid(jb.sys_id);
         var pri = eid(jb.priority);
+        var aNotes = ev(jb.notes);
+        var aPrev = aNotes ? (aNotes.length > 60 ? aNotes.substring(0, 60) + '...' : aNotes) : '';
+        var aCust = ev(jb.customer);
         html += '<div class="op-item assign-available-op">' +
             '<div class="op-seq" style="' +
                 (pri === 'critical' ? 'background:rgba(239,68,68,0.2);color:#EF4444;' :
                  pri === 'high' ? 'background:rgba(245,158,11,0.2);color:#F59E0B;' : '') + '">' +
                 escHtml(pri ? pri.charAt(0).toUpperCase() : '?') + '</div>' +
             '<div class="op-info">' +
-                '<div class="op-name">' + escHtml(ev(jb.job_number)) + '</div>' +
+                '<div class="op-name">' + escHtml(ev(jb.job_number)) + (aCust ? ' <span style="color:var(--text-secondary);font-weight:400;font-size:11px;">- ' + escHtml(aCust) + '</span>' : '') + '</div>' +
+                (aPrev ? '<div class="op-preview">' + escHtml(aPrev) + '</div>' : '') +
                 '<div class="op-meta"><span>' + escHtml(ev(jb.po_number)) + '</span><span>Qty: ' + ev(jb.quantity_due) + '</span>' +
                 (ev(jb.customer_due_date) ? '<span>Due: ' + escHtml(ev(jb.customer_due_date)) + '</span>' : '') + '</div>' +
             '</div>' +
             '<button class="quick-assign-btn" onclick="quickAssignJob(\'' + sid + '\')">+ Assign</button>' +
+        '</div>';
+    }
+    return html;
+}
+
+function renderOthersJobs(jobs) {
+    var html = '';
+    for (var i = 0; i < jobs.length; i++) {
+        var jb = jobs[i];
+        var sid = eid(jb.sys_id);
+        var pri = eid(jb.priority);
+        var rNotes = ev(jb.notes);
+        var rPrev = rNotes ? (rNotes.length > 50 ? rNotes.substring(0, 50) + '...' : rNotes) : '';
+        html += '<div class="op-item">' +
+            '<div class="op-seq" style="' +
+                (pri === 'critical' ? 'background:rgba(239,68,68,0.2);color:#EF4444;' :
+                 pri === 'high' ? 'background:rgba(245,158,11,0.2);color:#F59E0B;' : '') + '">' +
+                escHtml(pri ? pri.charAt(0).toUpperCase() : '?') + '</div>' +
+            '<div class="op-info">' +
+                '<div class="op-name">' + escHtml(ev(jb.job_number)) + '</div>' +
+                (rPrev ? '<div class="op-preview">' + escHtml(rPrev) + '</div>' : '') +
+                '<div class="op-meta"><span>' + escHtml(ev(jb.po_number)) + '</span><span>&#128100; ' + escHtml(ev(jb.assigned_to)) + '</span>' +
+                '<span>' + eid(jb.job_status).replace(/_/g, ' ') + '</span></div>' +
+            '</div>' +
+            '<button class="quick-assign-btn" style="background:rgba(245,158,11,0.15);color:#F59E0B;border-color:rgba(245,158,11,0.3);" onclick="reassignJob(\'' + sid + '\')">Reassign</button>' +
         '</div>';
     }
     return html;
@@ -500,7 +553,9 @@ function filterAvailableJobs() {
     var available = [];
     for (var i = 0; i < allJobs.length; i++) {
         var jb = allJobs[i];
-        if (eid(jb.job_status) !== 'not_started' || eid(jb.assigned_to)) continue;
+        if (eid(jb.assigned_to)) continue;
+        var fSt = eid(jb.job_status);
+        if (fSt === 'complete' || fSt === 'shipped') continue;
         if (filter) {
             var jn = ev(jb.job_number).toLowerCase();
             var po = ev(jb.po_number).toLowerCase();
@@ -523,6 +578,37 @@ function quickAssignJob(jobSysId) {
         job_status: 'assigned'
     }).then(function() {
         showToast('Job assigned to ' + staffName, 'success');
+        return refreshAll();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
+}
+
+function unassignJob(jobSysId) {
+    var job = findJob(jobSysId);
+    var jobNum = job ? ev(job.job_number) : '';
+    if (!confirm('Unassign ' + jobNum + '? It will go back to available jobs.')) return;
+    apiPatch('x_1964226_svem_com_jobs', jobSysId, {
+        assigned_to: '',
+        job_status: 'not_started'
+    }).then(function() {
+        showToast(jobNum + ' unassigned', 'success');
+        return refreshAll();
+    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
+}
+
+function reassignJob(jobSysId) {
+    if (!selectedAssignStaff) { showToast('Select the staff member to reassign TO first', 'error'); return; }
+    var job = findJob(jobSysId);
+    var jobNum = job ? ev(job.job_number) : '';
+    var staffName = '';
+    for (var i = 0; i < allStaff.length; i++) {
+        if (eid(allStaff[i].sys_id) === selectedAssignStaff) { staffName = ev(allStaff[i].name); break; }
+    }
+    if (!confirm('Reassign ' + jobNum + ' to ' + staffName + '?')) return;
+    apiPatch('x_1964226_svem_com_jobs', jobSysId, {
+        assigned_to: selectedAssignStaff,
+        job_status: 'assigned'
+    }).then(function() {
+        showToast(jobNum + ' reassigned to ' + staffName, 'success');
         return refreshAll();
     }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
@@ -553,11 +639,15 @@ function renderReview() {
             var jb = pending[j];
             var assignee = ev(jb.assigned_to);
             var sid = eid(jb.sys_id);
+            var revNotes = ev(jb.notes);
+            var revPrev = revNotes ? (revNotes.length > 100 ? revNotes.substring(0, 100) + '...' : revNotes) : '';
+            var revCust = ev(jb.customer);
 
             html += '<div class="review-card">' +
                 '<div class="review-header">' +
                     '<div>' +
-                        '<div class="review-job">' + escHtml(ev(jb.job_number)) + ' &bull; ' + escHtml(ev(jb.po_number)) + '</div>' +
+                        '<div class="review-job">' + escHtml(ev(jb.job_number)) + ' &bull; ' + escHtml(ev(jb.po_number)) + (revCust ? ' &bull; ' + escHtml(revCust) : '') + '</div>' +
+                        (revPrev ? '<div style="font-size:11px;color:var(--text-secondary);margin:2px 0 4px;line-height:1.3;">' + escHtml(revPrev) + '</div>' : '') +
                         '<div class="review-meta">By: ' + escHtml(assignee) + ' &bull; Qty: ' + ev(jb.quantity_due) + '</div>' +
                     '</div>' +
                     '<span class="badge pending_review">pending review</span>' +
@@ -1084,6 +1174,7 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
 .op-seq { width:30px; height:30px; border-radius:8px; background:var(--bg-tertiary); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; }
 .op-info { flex:1; min-width:0; }
 .op-name { font-size:13px; font-weight:600; }
+.op-preview { font-size:11px; color:var(--text-secondary); margin-top:3px; line-height:1.3; opacity:0.85; }
 .op-meta { font-size:10px; color:var(--text-secondary); margin-top:2px; }
 .op-meta span { margin-right:8px; }
 
