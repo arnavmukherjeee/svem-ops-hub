@@ -4,7 +4,7 @@
         <can_delegate>true</can_delegate>
         <description>QC technician role with access to quality control operations and jobs</description>
         <elevated_privilege>false</elevated_privilege>
-        <federated_id/>
+        <federated_id>xpsysxVXlvfTIaWFzB41/dy1XRlWqtvfPxeb7XZCbsQ=</federated_id>
         <grantable>true</grantable>
         <includes_roles/>
         <name>x_1964226_svem_com.qc_tech</name>
