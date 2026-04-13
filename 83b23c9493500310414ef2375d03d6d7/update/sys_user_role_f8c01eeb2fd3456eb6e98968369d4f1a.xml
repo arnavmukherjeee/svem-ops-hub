@@ -4,7 +4,7 @@
         <can_delegate>true</can_delegate>
         <description>Basic read-only access to SVEM Command Center dashboards and data</description>
         <elevated_privilege>false</elevated_privilege>
-        <federated_id/>
+        <federated_id>e8JTqhAWYVv2R/Cdf6bH+TKEgz2NXr0FaShjQ2dr7k0=</federated_id>
         <grantable>true</grantable>
         <includes_roles/>
         <name>x_1964226_svem_com.user</name>
