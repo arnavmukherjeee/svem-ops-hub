@@ -272,7 +272,7 @@ function renderJobList(jobs, canStart) {
         var sid = eid(job.sys_id);
 
         var priClass = pri === 'critical' ? 'danger' : (pri === 'high' ? 'warning' : '');
-        html += '<div class="op-item" onclick="' + (canStart ? 'startJobConfirm(\'' + sid + '\')' : '') + '">' +
+        html += '<div class="op-item">' +
             '<div class="op-seq' + (priClass ? ' ' + priClass : '') + '" style="' +
                 (pri === 'critical' ? 'background:rgba(239,68,68,0.2);color:#EF4444;' :
                  pri === 'high' ? 'background:rgba(245,158,11,0.2);color:#F59E0B;' : '') + '">' +
@@ -286,6 +286,7 @@ function renderJobList(jobs, canStart) {
                     (assignee ? '<span>&#128100; ' + escHtml(assignee) + '</span>' : '') +
                 '</div>' +
             '</div>' +
+            (canStart ? '<button class="action-btn primary" style="padding:6px 16px;font-size:12px;margin-left:8px;" onclick="startJobConfirm(\'' + sid + '\')">&#9654; Start</button>' : '') +
             '<span class="badge ' + status + '">' + status.replace(/_/g, ' ') + '</span>' +
         '</div>';
     }
@@ -1249,7 +1250,7 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
     <!-- MY TASKS -->
     <div class="tab-content active" id="tab-tasks">
         <div id="activeTaskArea"></div>
-        <div class="section-header">My Operations</div>
+        <div class="section-header">My Jobs</div>
         <div id="myOperations"><div class="loading"><div class="spinner"></div>Loading...</div></div>
     </div>
 
