@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <before/>
+        <description>Creates translated field labels (column_label) for all SVEM Command dictionary fields in Spanish, Chinese, Vietnamese, and Tagalog. Queries actual sys_dictionary sys_ids on the instance to set correct documentkey values.</description>
+        <name>SVEM - Create Field Label Translations</name>
+        <record_for_rollback>false</record_for_rollback>
+        <record_type>fix_script</record_type>
+        <script><![CDATA[// SVEM Command - Field Label Translation Fix Script
+// Creates sys_translated_text records for all custom dictionary fields
+// using actual sys_dictionary sys_ids as documentkeys
+
+var translations = {
+    // ===== JOBS TABLE =====
+    'x_1964226_svem_com_jobs': {
+        'job_number': { es: 'Número de Trabajo', zh: '工作编号', vi: 'Số Công Việc', tl: 'Numero ng Trabaho' },
+        'po_number': { es: 'Número de OC', zh: '采购订单号', vi: 'Số PO', tl: 'Numero ng PO' },
+        'customer': { es: 'Cliente', zh: '客户', vi: 'Khách Hàng', tl: 'Kliyente' },
+        'part_number': { es: 'Número de Pieza', zh: '零件编号', vi: 'Số Bộ Phận', tl: 'Numero ng Parte' },
+        'description': { es: 'Descripción', zh: '描述', vi: 'Mô Tả', tl: 'Paglalarawan' },
+        'quantity_due': { es: 'Cantidad Requerida', zh: '应交数量', vi: 'Số Lượng Cần', tl: 'Dami na Kailangan' },
+        'quantity_complete': { es: 'Cantidad Completada', zh: '已完成数量', vi: 'Số Lượng Hoàn Thành', tl: 'Dami na Tapos' },
+        'priority': { es: 'Prioridad', zh: '优先级', vi: 'Mức Ưu Tiên', tl: 'Priyoridad' },
+        'status': { es: 'Estado', zh: '状态', vi: 'Trạng Thái', tl: 'Katayuan' },
+        'assigned_machine': { es: 'Máquina Asignada', zh: '分配机器', vi: 'Máy Được Giao', tl: 'Nakatalagang Makina' },
+        'current_operation': { es: 'Operación Actual', zh: '当前工序', vi: 'Công Đoạn Hiện Tại', tl: 'Kasalukuyang Operasyon' },
+        'due_date': { es: 'Fecha de Vencimiento', zh: '到期日期', vi: 'Ngày Đến Hạn', tl: 'Petsa ng Takda' },
+        'start_date': { es: 'Fecha de Inicio', zh: '开始日期', vi: 'Ngày Bắt Đầu', tl: 'Petsa ng Simula' },
+        'notes': { es: 'Notas', zh: '备注', vi: 'Ghi Chú', tl: 'Mga Tala' }
+    },
+    // ===== MACHINES TABLE =====
+    'x_1964226_svem_com_machines': {
+        'machine_id': { es: 'ID de Máquina', zh: '机器编号', vi: 'Mã Máy', tl: 'ID ng Makina' },
+        'name': { es: 'Nombre', zh: '名称', vi: 'Tên', tl: 'Pangalan' },
+        'machine_type': { es: 'Tipo de Máquina', zh: '机器类型', vi: 'Loại Máy', tl: 'Uri ng Makina' },
+        'status': { es: 'Estado', zh: '状态', vi: 'Trạng Thái', tl: 'Katayuan' },
+        'location': { es: 'Ubicación', zh: '位置', vi: 'Vị Trí', tl: 'Lokasyon' },
+        'current_job': { es: 'Trabajo Actual', zh: '当前工作', vi: 'Công Việc Hiện Tại', tl: 'Kasalukuyang Trabaho' },
+        'efficiency_rating': { es: 'Calificación de Eficiencia', zh: '效率评级', vi: 'Đánh Giá Hiệu Suất', tl: 'Rating ng Episyensya' },
+        'last_maintenance': { es: 'Último Mantenimiento', zh: '上次维护', vi: 'Bảo Trì Lần Cuối', tl: 'Huling Maintenance' },
+        'next_maintenance': { es: 'Próximo Mantenimiento', zh: '下次维护', vi: 'Bảo Trì Tiếp Theo', tl: 'Susunod na Maintenance' },
+        'notes': { es: 'Notas', zh: '备注', vi: 'Ghi Chú', tl: 'Mga Tala' }
+    },
+    // ===== OPERATIONS TABLE =====
+    'x_1964226_svem_com_operations': {
+        'operation_id': { es: 'ID de Operación', zh: '工序编号', vi: 'Mã Công Đoạn', tl: 'ID ng Operasyon' },
+        'name': { es: 'Nombre', zh: '名称', vi: 'Tên', tl: 'Pangalan' },
+        'job': { es: 'Trabajo', zh: '工作', vi: 'Công Việc', tl: 'Trabaho' },
+        'sequence': { es: 'Secuencia', zh: '顺序', vi: 'Thứ Tự', tl: 'Pagkakasunod' },
+        'assigned_to': { es: 'Asignado A', zh: '分配给', vi: 'Giao Cho', tl: 'Nakatalaga Sa' },
+        'machine': { es: 'Máquina', zh: '机器', vi: 'Máy', tl: 'Makina' },
+        'status': { es: 'Estado', zh: '状态', vi: 'Trạng Thái', tl: 'Katayuan' },
+        'estimated_hours': { es: 'Horas Estimadas', zh: '预计工时', vi: 'Giờ Ước Tính', tl: 'Tinatayang Oras' },
+        'actual_hours': { es: 'Horas Reales', zh: '实际工时', vi: 'Giờ Thực Tế', tl: 'Aktwal na Oras' },
+        'start_time': { es: 'Hora de Inicio', zh: '开始时间', vi: 'Thời Gian Bắt Đầu', tl: 'Oras ng Simula' },
+        'end_time': { es: 'Hora de Fin', zh: '结束时间', vi: 'Thời Gian Kết Thúc', tl: 'Oras ng Wakas' },
+        'notes': { es: 'Notas', zh: '备注', vi: 'Ghi Chú', tl: 'Mga Tala' },
+        'quantity_complete': { es: 'Cantidad Completada', zh: '已完成数量', vi: 'Số Lượng Hoàn Thành', tl: 'Dami na Tapos' },
+        'scrap_quantity': { es: 'Cantidad de Desperdicio', zh: '废品数量', vi: 'Số Lượng Phế Phẩm', tl: 'Dami ng Scrap' }
+    },
+    // ===== STAFF TABLE =====
+    'x_1964226_svem_com_staff': {
+        'employee_id': { es: 'ID de Empleado', zh: '员工编号', vi: 'Mã Nhân Viên', tl: 'ID ng Empleyado' },
+        'name': { es: 'Nombre', zh: '姓名', vi: 'Tên', tl: 'Pangalan' },
+        'role': { es: 'Rol', zh: '角色', vi: 'Vai Trò', tl: 'Tungkulin' },
+        'shift': { es: 'Turno', zh: '班次', vi: 'Ca Làm', tl: 'Shift' },
+        'status': { es: 'Estado', zh: '状态', vi: 'Trạng Thái', tl: 'Katayuan' },
+        'current_machine': { es: 'Máquina Actual', zh: '当前机器', vi: 'Máy Hiện Tại', tl: 'Kasalukuyang Makina' },
+        'current_operation': { es: 'Operación Actual', zh: '当前工序', vi: 'Công Đoạn Hiện Tại', tl: 'Kasalukuyang Operasyon' },
+        'skills': { es: 'Habilidades', zh: '技能', vi: 'Kỹ Năng', tl: 'Mga Kasanayan' },
+        'phone': { es: 'Teléfono', zh: '电话', vi: 'Điện Thoại', tl: 'Telepono' },
+        'email': { es: 'Correo Electrónico', zh: '电子邮箱', vi: 'Email', tl: 'Email' },
+        'hire_date': { es: 'Fecha de Contratación', zh: '入职日期', vi: 'Ngày Tuyển Dụng', tl: 'Petsa ng Pag-hire' },
+        'notes': { es: 'Notas', zh: '备注', vi: 'Ghi Chú', tl: 'Mga Tala' }
+    },
+    // ===== DELIVERIES TABLE =====
+    'x_1964226_svem_com_deliveries': {
+        'delivery_id': { es: 'ID de Entrega', zh: '交付编号', vi: 'Mã Giao Hàng', tl: 'ID ng Delivery' },
+        'job': { es: 'Trabajo', zh: '工作', vi: 'Công Việc', tl: 'Trabaho' },
+        'delivery_status': { es: 'Estado de Entrega', zh: '交付状态', vi: 'Trạng Thái Giao Hàng', tl: 'Katayuan ng Delivery' },
+        'delivery_type': { es: 'Tipo de Entrega', zh: '交付类型', vi: 'Loại Giao Hàng', tl: 'Uri ng Delivery' },
+        'carrier': { es: 'Transportista', zh: '承运商', vi: 'Nhà Vận Chuyển', tl: 'Tagapagdala' },
+        'tracking_number': { es: 'Número de Rastreo', zh: '追踪号', vi: 'Số Theo Dõi', tl: 'Numero ng Tracking' },
+        'ship_by_date': { es: 'Fecha de Envío', zh: '发货日期', vi: 'Ngày Gửi Hàng', tl: 'Petsa ng Pagpapadala' },
+        'need_by_date': { es: 'Fecha Requerida', zh: '需求日期', vi: 'Ngày Cần', tl: 'Petsa na Kailangan' },
+        'customer_due_date': { es: 'Fecha Límite del Cliente', zh: '客户到期日', vi: 'Ngày Đến Hạn Khách Hàng', tl: 'Takdang Petsa ng Kliyente' },
+        'original_date': { es: 'Fecha Original', zh: '原始日期', vi: 'Ngày Ban Đầu', tl: 'Orihinal na Petsa' },
+        'quantity_due': { es: 'Cantidad Requerida', zh: '应交数量', vi: 'Số Lượng Cần', tl: 'Dami na Kailangan' },
+        'po_line': { es: 'Línea de OC', zh: '采购订单行', vi: 'Dòng PO', tl: 'Linya ng PO' },
+        'release_number': { es: 'Número de Liberación', zh: '释放号', vi: 'Số Phát Hành', tl: 'Numero ng Release' }
+    }
+};
+
+var languages = ['es', 'zh', 'vi', 'tl'];
+var created = 0;
+var updated = 0;
+var errors = 0;
+
+for (var tableName in translations) {
+    var fields = translations[tableName];
+    for (var element in fields) {
+        // Get the actual sys_id of this dictionary record
+        var dictGR = new GlideRecord('sys_dictionary');
+        dictGR.addQuery('name', tableName);
+        dictGR.addQuery('element', element);
+        dictGR.query();
+
+        if (!dictGR.next()) {
+            gs.warn('SVEM Translation: Dictionary record not found for ' + tableName + '.' + element);
+            errors++;
+            continue;
+        }
+
+        var dictSysId = dictGR.getUniqueValue();
+        var langMap = fields[element];
+
+        for (var i = 0; i < languages.length; i++) {
+            var lang = languages[i];
+            var translatedValue = langMap[lang];
+            if (!translatedValue) continue;
+
+            // Check if translation already exists
+            var existingGR = new GlideRecord('sys_translated_text');
+            existingGR.addQuery('tablename', 'sys_dictionary');
+            existingGR.addQuery('documentkey', dictSysId);
+            existingGR.addQuery('fieldname', 'column_label');
+            existingGR.addQuery('language', lang);
+            existingGR.query();
+
+            if (existingGR.next()) {
+                if (existingGR.getValue('value') != translatedValue) {
+                    existingGR.setValue('value', translatedValue);
+                    existingGR.update();
+                    updated++;
+                }
+            } else {
+                var newGR = new GlideRecord('sys_translated_text');
+                newGR.initialize();
+                newGR.setValue('tablename', 'sys_dictionary');
+                newGR.setValue('documentkey', dictSysId);
+                newGR.setValue('fieldname', 'column_label');
+                newGR.setValue('language', lang);
+                newGR.setValue('value', translatedValue);
+                newGR.insert();
+                created++;
+            }
+        }
+    }
+}
+
+gs.info('SVEM Translation Fix Script Complete: ' + created + ' created, ' + updated + ' updated, ' + errors + ' errors');]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-12 23:30:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>b7e2a4c1d3f5e6a8b9c0d1e2f3a4b5c6</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>SVEM - Create Field Label Translations</sys_name>
+        <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+        <sys_update_name>sys_script_fix_b7e2a4c1d3f5e6a8b9c0d1e2f3a4b5c6</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-12 23:30:00</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>
