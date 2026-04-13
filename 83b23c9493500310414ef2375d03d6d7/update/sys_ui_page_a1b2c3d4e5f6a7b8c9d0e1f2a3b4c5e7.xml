@@ -1,19 +1,577 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page">
     <sys_ui_page action="INSERT_OR_UPDATE">
         <category>general</category>
-        <client_script/>
+        <client_script><![CDATA[
+// ============================================
+// SVEM EMPLOYEE PORTAL - Application Logic
+// ============================================
+
+var API_BASE = '/api/now/table';
+var HEADERS = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'X-UserToken': window.g_ck || ''
+};
+
+// State
+var currentUser = null;
+var staffRecord = null;
+var myOperations = [];
+var allMachines = [];
+var allJobs = [];
+var activeTimer = null;
+var timerStart = null;
+var timerElapsed = 0;
+var selectedMachineSysId = null;
+var selectedMachineStatus = null;
+var clockedIn = false;
+
+// ---- INIT ----
+addLoadEvent(function() { portalInit(); });
+
+function portalInit() {
+    loadCurrentUser().then(function() {
+        return Promise.all([loadMyOperations(), loadMachines(), loadJobs()]);
+    }).then(function() {
+        renderTasks();
+        renderMachines();
+        renderTimeLog();
+        renderProfile();
+    }).catch(function(e) {
+        console.error('Init error:', e);
+    });
+}
+
+// ---- API HELPERS ----
+function apiGet(table, params) {
+    var url = API_BASE + '/' + table;
+    if (params) {
+        var qs = [];
+        for (var k in params) { qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k])); }
+        url += '?' + qs.join('&');
+    }
+    return fetch(url, { method: 'GET', headers: HEADERS })
+        .then(function(res) {
+            if (!res.ok) throw new Error('API error: ' + res.status);
+            return res.json();
+        })
+        .then(function(data) { return data.result || []; });
+}
+
+function apiPatch(table, sysId, data) {
+    return fetch(API_BASE + '/' + table + '/' + sysId, {
+        method: 'PATCH', headers: HEADERS, body: JSON.stringify(data)
+    }).then(function(res) {
+        if (!res.ok) throw new Error('API error: ' + res.status);
+        return res.json();
+    }).then(function(data) { return data.result; });
+}
+
+function extractVal(field) {
+    if (!field) return '';
+    if (typeof field === 'object') return field.display_value || field.value || '';
+    return field;
+}
+
+function extractSysId(field) {
+    if (!field) return '';
+    if (typeof field === 'object') return field.value || '';
+    return field;
+}
+
+// ---- LOAD DATA ----
+function loadCurrentUser() {
+    var userName = 'admin';
+    try { if (window.NOW && window.NOW.user) userName = window.NOW.user.name; } catch(e) {}
+
+    return apiGet('sys_user', {
+        sysparm_query: 'user_name=' + userName,
+        sysparm_display_value: 'all',
+        sysparm_fields: 'sys_id,name,user_name,title',
+        sysparm_limit: '1'
+    }).then(function(users) {
+        currentUser = users[0] || null;
+        return apiGet('x_1964226_svem_com_staff', {
+            sysparm_display_value: 'all',
+            sysparm_fields: 'sys_id,name,employee_id,role,shift,status,current_job,current_machine,current_operation,jobs_completed_this_week',
+            sysparm_limit: '100'
+        });
+    }).then(function(staff) {
+        var uName = currentUser ? extractVal(currentUser.name) : '';
+        staffRecord = null;
+        for (var i = 0; i < staff.length; i++) {
+            if (extractVal(staff[i].name) === uName) { staffRecord = staff[i]; break; }
+        }
+        if (!staffRecord && staff.length > 0) staffRecord = staff[0];
+
+        var name = staffRecord ? extractVal(staffRecord.name) : uName;
+        gel('userName').innerHTML = escHtml(name || 'Employee');
+        gel('userAvatar').innerHTML = name ? name.charAt(0).toUpperCase() : '?';
+        var role = staffRecord ? extractVal(staffRecord.role) : '';
+        gel('userRole').innerHTML = role ? formatRole(role) + ' &bull; SVEM' : 'SVEM Employee Portal';
+
+        if (staffRecord) {
+            var status = extractVal(staffRecord.status);
+            clockedIn = (status === 'available' || status === 'assigned');
+            updateClockBtn();
+        }
+    });
+}
+
+function loadMyOperations() {
+    return apiGet('x_1964226_svem_com_operations', {
+        sysparm_display_value: 'all',
+        sysparm_fields: 'sys_id,job,sequence,work_center,description,op_status,preferred_machine,completed_by,started_date,completed_date,estimated_hours,actual_hours,process_name',
+        sysparm_query: 'op_status!=complete^ORDERBYsequence',
+        sysparm_limit: '50'
+    }).then(function(ops) { myOperations = ops; });
+}
+
+function loadMachines() {
+    return apiGet('x_1964226_svem_com_machines', {
+        sysparm_display_value: 'all',
+        sysparm_fields: 'sys_id,machine_name,machine_number,machine_type,status,current_job,current_operation,uptime_percentage',
+        sysparm_limit: '50'
+    }).then(function(m) { allMachines = m; });
+}
+
+function loadJobs() {
+    return apiGet('x_1964226_svem_com_jobs', {
+        sysparm_display_value: 'all',
+        sysparm_fields: 'sys_id,job_number,po_number,customer,job_status,priority,percent_complete,customer_due_date,quantity_due,assigned_machine',
+        sysparm_limit: '100'
+    }).then(function(j) { allJobs = j; });
+}
+
+// ---- RENDER: TASKS ----
+function renderTasks() {
+    var container = gel('myOperations');
+    var activeArea = gel('activeTaskArea');
+
+    var activeOp = null;
+    for (var i = 0; i < myOperations.length; i++) {
+        if (extractVal(myOperations[i].op_status) === 'in_progress') { activeOp = myOperations[i]; break; }
+    }
+
+    if (activeOp) {
+        var jobName = extractVal(activeOp.job);
+        var wc = extractVal(activeOp.work_center) || extractVal(activeOp.process_name);
+        var opSysId = extractSysId(activeOp.sys_id);
+        activeArea.innerHTML = '<div class="active-task">' +
+            '<div class="active-task-label">&#9654; Currently Working On</div>' +
+            '<div class="active-task-job">' + escHtml(jobName) + '</div>' +
+            '<div class="active-task-op">Step ' + extractVal(activeOp.sequence) + ' &bull; ' + escHtml(wc).toUpperCase() + '</div>' +
+            '<div class="active-task-timer" id="taskTimer">00:00:00</div>' +
+            '<div class="active-task-actions">' +
+                '<button class="action-btn warning" onclick="pauseOperation(\'' + opSysId + '\')">&#10074;&#10074; Pause</button>' +
+                '<button class="action-btn success" onclick="completeOperation(\'' + opSysId + '\')">&#10003; Complete</button>' +
+            '</div>' +
+        '</div>';
+        startTimer();
+    } else {
+        activeArea.innerHTML = '';
+        stopTimer();
+    }
+
+    var pending = [];
+    for (var j = 0; j < myOperations.length; j++) {
+        if (extractVal(myOperations[j].op_status) !== 'in_progress') pending.push(myOperations[j]);
+    }
+
+    if (pending.length === 0 && !activeOp) {
+        container.innerHTML = '<div class="empty-state"><p>No pending operations assigned to you.</p></div>';
+        return;
+    }
+
+    var html = '';
+    for (var k = 0; k < pending.length; k++) {
+        var op = pending[k];
+        var status = extractVal(op.op_status) || 'queued';
+        var jn = extractVal(op.job);
+        var wcn = extractVal(op.work_center) || extractVal(op.process_name) || '--';
+        var estH = extractVal(op.estimated_hours);
+        var sid = extractSysId(op.sys_id);
+
+        html += '<div class="op-item" onclick="showOperationActions(\'' + sid + '\')">' +
+            '<div class="op-seq">' + extractVal(op.sequence) + '</div>' +
+            '<div class="op-info">' +
+                '<div class="op-name">' + escHtml(wcn).toUpperCase() + '</div>' +
+                '<div class="op-meta"><span>' + escHtml(jn) + '</span>' + (estH ? '<span>' + estH + 'h est.</span>' : '') + '</div>' +
+            '</div>' +
+            '<span class="badge ' + status + '">' + status.replace('_', ' ') + '</span>' +
+        '</div>';
+    }
+    container.innerHTML = html;
+}
+
+// ---- RENDER: MACHINES ----
+function renderMachines() {
+    var container = gel('machineList');
+    var runCount = 0;
+    for (var i = 0; i < allMachines.length; i++) {
+        if (extractVal(allMachines[i].status) === 'running') runCount++;
+    }
+    gel('machineCount').innerHTML = runCount + '/' + allMachines.length + ' running';
+
+    if (allMachines.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>No machines found</p></div>';
+        return;
+    }
+
+    var html = '<div class="machine-grid">';
+    for (var j = 0; j < allMachines.length; j++) {
+        var m = allMachines[j];
+        var status = extractVal(m.status) || 'idle';
+        var name = extractVal(m.machine_name);
+        var number = extractVal(m.machine_number);
+        var job = extractVal(m.current_job);
+        var sysId = extractSysId(m.sys_id);
+
+        html += '<div class="machine-card ' + status + '" onclick="openMachineModal(\'' + sysId + '\')">' +
+            '<div class="machine-card-name">' + escHtml(name) + '</div>' +
+            '<div class="machine-card-number">' + escHtml(number) + '</div>' +
+            '<span class="badge ' + status + '">' + status + '</span>' +
+            (job ? '<div class="machine-card-job">' + escHtml(job) + '</div>' : '') +
+        '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// ---- RENDER: TIME LOG ----
+function renderTimeLog() {
+    var select = gel('logOperation');
+    var opts = '<option value="">Select an operation...</option>';
+    for (var i = 0; i < myOperations.length; i++) {
+        var op = myOperations[i];
+        var wc = extractVal(op.work_center) || extractVal(op.process_name);
+        var jb = extractVal(op.job);
+        opts += '<option value="' + extractSysId(op.sys_id) + '">' + escHtml(jb) + ' - ' + escHtml(wc) + '</option>';
+    }
+    select.innerHTML = opts;
+
+    var container = gel('timeEntries');
+    var opsWithHours = [];
+    for (var j = 0; j < myOperations.length; j++) {
+        if (parseFloat(extractVal(myOperations[j].actual_hours)) > 0) opsWithHours.push(myOperations[j]);
+    }
+
+    if (opsWithHours.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>No time entries yet. Log your first hours above!</p></div>';
+        return;
+    }
+
+    var html = '';
+    for (var k = 0; k < opsWithHours.length; k++) {
+        var o = opsWithHours[k];
+        var job2 = extractVal(o.job);
+        var wc2 = extractVal(o.work_center) || extractVal(o.process_name);
+        var hours = extractVal(o.actual_hours);
+        var date = extractVal(o.started_date) || '';
+
+        html += '<div class="time-entry">' +
+            '<div class="time-entry-icon"><span style="font-size:18px;color:#3B82F6;">&#9201;</span></div>' +
+            '<div class="time-entry-info">' +
+                '<div class="time-entry-job">' + escHtml(job2) + '</div>' +
+                '<div class="time-entry-detail">' + escHtml(wc2) + '</div>' +
+            '</div>' +
+            '<div><div class="time-entry-hours">' + hours + 'h</div>' +
+            '<div class="time-entry-date">' + (date ? date.split(' ')[0] : '') + '</div></div>' +
+        '</div>';
+    }
+    container.innerHTML = html;
+}
+
+// ---- RENDER: PROFILE ----
+function renderProfile() {
+    if (!staffRecord) return;
+
+    gel('profileEmpId').innerHTML = extractVal(staffRecord.employee_id) || '--';
+    gel('profileRole').innerHTML = formatRole(extractVal(staffRecord.role));
+    gel('profileShift').innerHTML = (extractVal(staffRecord.shift) || '--').toUpperCase();
+    gel('profileStatus').innerHTML = '<span class="badge ' + extractVal(staffRecord.status) + '">' + extractVal(staffRecord.status) + '</span>';
+    gel('profileMachine').innerHTML = extractVal(staffRecord.current_machine) || 'None';
+
+    gel('statJobsCompleted').innerHTML = extractVal(staffRecord.jobs_completed_this_week) || '0';
+    var totalHours = 0;
+    for (var i = 0; i < myOperations.length; i++) {
+        totalHours += parseFloat(extractVal(myOperations[i].actual_hours)) || 0;
+    }
+    gel('statHoursLogged').innerHTML = totalHours.toFixed(1);
+    var completedOps = 0;
+    for (var j = 0; j < myOperations.length; j++) {
+        if (extractVal(myOperations[j].op_status) === 'complete') completedOps++;
+    }
+    gel('statOpsCompleted').innerHTML = completedOps;
+    gel('statCurrentStreak').innerHTML = Math.min(parseInt(extractVal(staffRecord.jobs_completed_this_week)) || 0, 5);
+}
+
+// ---- ACTIONS ----
+function showOperationActions(sysId) {
+    var op = null;
+    for (var i = 0; i < myOperations.length; i++) {
+        if (extractSysId(myOperations[i].sys_id) === sysId) { op = myOperations[i]; break; }
+    }
+    if (!op) return;
+
+    var status = extractVal(op.op_status);
+    if (status === 'queued' || status === 'pending') {
+        if (confirm('Start working on this operation?')) {
+            startOperation(sysId);
+        }
+    } else {
+        openJobDetail(op);
+    }
+}
+
+function startOperation(sysId) {
+    var now = new Date();
+    var dateStr = now.toISOString().replace('T', ' ').split('.')[0];
+    apiPatch('x_1964226_svem_com_operations', sysId, {
+        op_status: 'in_progress',
+        started_date: dateStr
+    }).then(function() {
+        showToast('Operation started!', 'success');
+        return loadMyOperations();
+    }).then(function() {
+        renderTasks();
+        renderTimeLog();
+    }).catch(function() {
+        showToast('Error starting operation', 'error');
+    });
+}
+
+function pauseOperation(sysId) {
+    apiPatch('x_1964226_svem_com_operations', sysId, { op_status: 'on_hold' })
+    .then(function() {
+        showToast('Operation paused', 'success');
+        return loadMyOperations();
+    }).then(function() {
+        renderTasks();
+    }).catch(function() {
+        showToast('Error pausing operation', 'error');
+    });
+}
+
+function completeOperation(sysId) {
+    if (!confirm('Mark this operation as complete?')) return;
+    var elapsed = timerElapsed / 3600;
+    var patchData = {
+        op_status: 'complete',
+        completed_date: new Date().toISOString().replace('T', ' ').split('.')[0]
+    };
+    if (elapsed > 0) patchData.actual_hours = elapsed.toFixed(2);
+
+    apiPatch('x_1964226_svem_com_operations', sysId, patchData)
+    .then(function() {
+        showToast('Operation completed!', 'success');
+        stopTimer();
+        return loadMyOperations();
+    }).then(function() {
+        renderTasks();
+        renderTimeLog();
+    }).catch(function() {
+        showToast('Error completing operation', 'error');
+    });
+}
+
+function submitTimeLog() {
+    var opId = gel('logOperation').value;
+    var hours = parseFloat(gel('logHours').value);
+    var notes = gel('logNotes').value;
+
+    if (!opId) { showToast('Please select an operation', 'error'); return; }
+    if (!hours || hours <= 0) { showToast('Please enter valid hours', 'error'); return; }
+
+    var op = null;
+    for (var i = 0; i < myOperations.length; i++) {
+        if (extractSysId(myOperations[i].sys_id) === opId) { op = myOperations[i]; break; }
+    }
+    var existing = op ? (parseFloat(extractVal(op.actual_hours)) || 0) : 0;
+    var patchData = { actual_hours: (existing + hours).toFixed(2) };
+    if (notes) patchData.notes = notes;
+
+    apiPatch('x_1964226_svem_com_operations', opId, patchData)
+    .then(function() {
+        showToast(hours + ' hours logged!', 'success');
+        gel('logHours').value = '';
+        gel('logNotes').value = '';
+        return loadMyOperations();
+    }).then(function() {
+        renderTimeLog();
+        renderProfile();
+    }).catch(function() {
+        showToast('Error logging hours', 'error');
+    });
+}
+
+// ---- CLOCK IN/OUT ----
+function toggleClock() {
+    if (!staffRecord) { showToast('Staff record not found', 'error'); return; }
+    var newStatus = clockedIn ? 'off' : 'available';
+    apiPatch('x_1964226_svem_com_staff', extractSysId(staffRecord.sys_id), { status: newStatus })
+    .then(function() {
+        clockedIn = !clockedIn;
+        staffRecord.status = { display_value: newStatus, value: newStatus };
+        updateClockBtn();
+        renderProfile();
+        showToast(clockedIn ? 'Clocked in!' : 'Clocked out!', 'success');
+    }).catch(function() {
+        showToast('Error updating status', 'error');
+    });
+}
+
+function updateClockBtn() {
+    var btn = gel('clockBtn');
+    if (clockedIn) {
+        btn.innerHTML = 'Clock Out';
+        btn.className = 'clock-btn clock-out';
+    } else {
+        btn.innerHTML = 'Clock In';
+        btn.className = 'clock-btn clock-in';
+    }
+}
+
+// ---- MACHINE MODAL ----
+function openMachineModal(sysId) {
+    var machine = null;
+    for (var i = 0; i < allMachines.length; i++) {
+        if (extractSysId(allMachines[i].sys_id) === sysId) { machine = allMachines[i]; break; }
+    }
+    if (!machine) return;
+
+    selectedMachineSysId = sysId;
+    selectedMachineStatus = extractVal(machine.status);
+
+    gel('machineModalName').innerHTML = escHtml(extractVal(machine.machine_name));
+    gel('machineModalInfo').innerHTML = escHtml(extractVal(machine.machine_number)) + ' &bull; ' + escHtml(extractVal(machine.machine_type));
+
+    var opts = document.querySelectorAll('.status-option');
+    for (var j = 0; j < opts.length; j++) { opts[j].className = 'status-option'; }
+
+    gel('machineModal').className = 'modal-overlay active';
+}
+
+function selectMachineStatus(status, el) {
+    selectedMachineStatus = status;
+    var opts = document.querySelectorAll('.status-option');
+    for (var i = 0; i < opts.length; i++) { opts[i].className = 'status-option'; }
+    el.className = 'status-option selected';
+}
+
+function saveMachineStatus() {
+    if (!selectedMachineSysId || !selectedMachineStatus) return;
+    apiPatch('x_1964226_svem_com_machines', selectedMachineSysId, { status: selectedMachineStatus })
+    .then(function() {
+        showToast('Machine status updated!', 'success');
+        closeModal('machineModal');
+        return loadMachines();
+    }).then(function() {
+        renderMachines();
+    }).catch(function() {
+        showToast('Error updating machine', 'error');
+    });
+}
+
+// ---- JOB DETAIL ----
+function openJobDetail(op) {
+    var jobRef = extractVal(op.job);
+    gel('modalJobNumber').innerHTML = escHtml(jobRef);
+    gel('modalJobInfo').innerHTML = escHtml(extractVal(op.work_center) || '');
+
+    var jobOps = [];
+    for (var i = 0; i < myOperations.length; i++) {
+        if (extractVal(myOperations[i].job) === jobRef) jobOps.push(myOperations[i]);
+    }
+    jobOps.sort(function(a, b) { return parseInt(extractVal(a.sequence)) - parseInt(extractVal(b.sequence)); });
+
+    var html = '';
+    for (var j = 0; j < jobOps.length; j++) {
+        var o = jobOps[j];
+        var st = extractVal(o.op_status) || 'queued';
+        var wcn = extractVal(o.work_center) || extractVal(o.process_name) || '--';
+        var est = extractVal(o.estimated_hours);
+        var act = extractVal(o.actual_hours);
+
+        html += '<div class="routing-step">' +
+            '<div class="routing-dot ' + st + '">' + extractVal(o.sequence) + '</div>' +
+            '<div class="routing-info">' +
+                '<div class="routing-wc">' + escHtml(wcn).toUpperCase() + '</div>' +
+                '<div class="routing-desc">' + escHtml(extractVal(o.description) || 'No description') + '</div>' +
+                '<div class="routing-hours">' + (est ? 'Est: ' + est + 'h' : '') + (act ? ' &bull; Actual: ' + act + 'h' : '') + '</div>' +
+            '</div>' +
+            '<span class="badge ' + st + '">' + st.replace('_', ' ') + '</span>' +
+        '</div>';
+    }
+    gel('modalRouting').innerHTML = html || '<div class="empty-state"><p>No routing steps found</p></div>';
+    gel('jobDetailModal').className = 'modal-overlay active';
+}
+
+// ---- TIMER ----
+function startTimer() {
+    if (activeTimer) return;
+    timerStart = Date.now();
+    timerElapsed = 0;
+    activeTimer = setInterval(function() {
+        timerElapsed = (Date.now() - timerStart) / 1000;
+        var h = Math.floor(timerElapsed / 3600);
+        var m = Math.floor((timerElapsed % 3600) / 60);
+        var s = Math.floor(timerElapsed % 60);
+        var el = gel('taskTimer');
+        if (el) el.innerHTML = pad(h) + ':' + pad(m) + ':' + pad(s);
+    }, 1000);
+}
+
+function stopTimer() {
+    if (activeTimer) { clearInterval(activeTimer); activeTimer = null; }
+    timerElapsed = 0;
+}
+
+function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+// ---- UI HELPERS ----
+function switchTab(tabName, btn) {
+    var tabs = document.querySelectorAll('.tab-content');
+    for (var i = 0; i < tabs.length; i++) tabs[i].className = 'tab-content';
+    var btns = document.querySelectorAll('.tab-btn');
+    for (var j = 0; j < btns.length; j++) btns[j].className = 'tab-btn';
+    gel('tab-' + tabName).className = 'tab-content active';
+    btn.className = 'tab-btn active';
+}
+
+function closeModal(id) { gel(id).className = 'modal-overlay'; }
+
+function showToast(msg, type) {
+    var toast = gel('toast');
+    toast.innerHTML = escHtml(msg);
+    toast.className = 'toast ' + (type || '') + ' show';
+    setTimeout(function() { toast.className = 'toast'; }, 2500);
+}
+
+function formatRole(role) {
+    var map = {
+        operator: 'Operator', setup_operator: 'Setup Operator', qc_technician: 'QC Technician',
+        programmer: 'Programmer', deburr_operator: 'Deburr Operator', material_handler: 'Material Handler',
+        driver: 'Driver', shipping_technician: 'Shipping Tech'
+    };
+    return map[role] || (role || '').replace(/_/g, ' ');
+}
+
+function escHtml(s) {
+    if (!s) return '';
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+}
+]]></client_script>
         <description>SVEM Employee Portal - Shop Floor Worker View</description>
         <direct>true</direct>
         <endpoint>x_1964226_svem_com_employee_portal.do</endpoint>
         <html><![CDATA[<html>
 <head>
     <title>SVEM Employee Portal</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <script>window.g_ck = "$[gs.getSession().getSessionToken() || gs.getSessionToken()]";</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <style>
-/* ============================================
-   SVEM EMPLOYEE PORTAL - Mobile-First Design
-   ============================================ */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
@@ -37,12 +595,11 @@ html, body {
     background: var(--bg-primary);
     color: var(--text-primary);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    height: 100vh; height: 100dvh;
+    height: 100vh;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
 }
 
-/* ---- HEADER ---- */
 .header {
     height: var(--header-height);
     background: var(--bg-secondary);
@@ -69,20 +626,12 @@ html, body {
 .header-info p { font-size: 11px; color: var(--text-secondary); line-height: 1.2; }
 
 .clock-btn {
-    padding: 8px 16px;
-    border-radius: 8px;
-    border: none;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
+    padding: 8px 16px; border-radius: 8px; border: none;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
 }
 .clock-btn.clock-in { background: var(--success); color: white; }
-.clock-btn.clock-in:hover { background: #16A34A; }
 .clock-btn.clock-out { background: var(--danger); color: white; }
-.clock-btn.clock-out:hover { background: #DC2626; }
 
-/* ---- MAIN CONTENT ---- */
 .main-content {
     position: fixed;
     top: var(--header-height);
@@ -96,7 +645,6 @@ html, body {
 .tab-content { display: none; padding: 16px; padding-bottom: 24px; }
 .tab-content.active { display: block; }
 
-/* ---- BOTTOM TABS ---- */
 .bottom-tabs {
     position: fixed; bottom: 0; left: 0; right: 0;
     height: var(--tab-height);
@@ -115,32 +663,11 @@ html, body {
     background: none; border: none;
     color: var(--text-secondary);
     font-size: 10px; font-weight: 500;
-    cursor: pointer;
-    transition: color 0.2s;
-    -webkit-tap-highlight-color: transparent;
+    cursor: pointer; transition: color 0.2s;
 }
-
 .tab-btn.active { color: var(--accent); }
 .tab-btn svg { width: 24px; height: 24px; }
 
-/* ---- CARDS ---- */
-.card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 12px;
-}
-
-.card-header {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 12px;
-}
-
-.card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-.card-subtitle { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-
-/* ---- SECTION HEADERS ---- */
 .section-header {
     font-size: 13px; font-weight: 700; color: var(--text-secondary);
     text-transform: uppercase; letter-spacing: 0.5px;
@@ -149,7 +676,6 @@ html, body {
 }
 .section-header:first-child { margin-top: 0; }
 
-/* ---- BADGES ---- */
 .badge {
     display: inline-flex; align-items: center;
     padding: 3px 8px; border-radius: 4px;
@@ -168,61 +694,34 @@ html, body {
 .badge.assigned { background: rgba(59,130,246,0.15); color: var(--accent); }
 .badge.off { background: rgba(139,141,151,0.15); color: var(--text-secondary); }
 
-/* ---- ACTIVE TASK CARD ---- */
 .active-task {
     background: linear-gradient(135deg, rgba(59,130,246,0.1), rgba(59,130,246,0.05));
     border: 1px solid rgba(59,130,246,0.3);
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 16px;
+    border-radius: 12px; padding: 16px; margin-bottom: 16px;
 }
-
-.active-task-label {
-    font-size: 11px; font-weight: 700; color: var(--accent);
-    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;
-}
-
+.active-task-label { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
 .active-task-job { font-size: 18px; font-weight: 700; color: var(--text-primary); }
 .active-task-op { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
-
-.active-task-timer {
-    font-size: 32px; font-weight: 700; color: var(--accent);
-    font-variant-numeric: tabular-nums;
-    margin: 12px 0;
-    text-align: center;
-}
-
-.active-task-actions {
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: 8px; margin-top: 12px;
-}
+.active-task-timer { font-size: 32px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; margin: 12px 0; text-align: center; }
+.active-task-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 
 .action-btn {
     padding: 12px; border: none; border-radius: 8px;
-    font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: all 0.2s;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
     display: flex; align-items: center; justify-content: center; gap: 6px;
 }
 .action-btn.primary { background: var(--accent); color: white; }
-.action-btn.primary:hover { background: var(--accent-hover); }
 .action-btn.success { background: var(--success); color: white; }
-.action-btn.success:hover { background: #16A34A; }
 .action-btn.warning { background: var(--warning); color: #000; }
-.action-btn.warning:hover { background: #D97706; }
 .action-btn.danger { background: var(--danger); color: white; }
-.action-btn.danger:hover { background: #DC2626; }
 .action-btn.secondary { background: var(--bg-tertiary); color: var(--text-primary); }
-.action-btn.secondary:hover { background: #3B3E4A; }
 .action-btn.full { grid-column: 1 / -1; }
 
-/* ---- OPERATION LIST ITEMS ---- */
 .op-item {
     display: flex; align-items: center; gap: 12px;
     padding: 12px; background: var(--bg-secondary);
     border: 1px solid var(--border); border-radius: 8px;
-    margin-bottom: 8px; cursor: pointer;
-    transition: background 0.15s;
-    text-decoration: none; color: inherit;
+    margin-bottom: 8px; cursor: pointer; transition: background 0.15s;
 }
 .op-item:hover { background: rgba(59,130,246,0.05); }
 
@@ -230,31 +729,19 @@ html, body {
     width: 32px; height: 32px; border-radius: 8px;
     background: var(--bg-tertiary);
     display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 700; color: var(--text-primary);
-    flex-shrink: 0;
+    font-size: 13px; font-weight: 700; color: var(--text-primary); flex-shrink: 0;
 }
-
 .op-info { flex: 1; min-width: 0; }
 .op-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .op-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 .op-meta span { margin-right: 8px; }
 
-/* ---- MACHINE GRID ---- */
-.machine-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 10px;
-}
+.machine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 
 .machine-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-align: center;
-    position: relative;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 12px; cursor: pointer;
+    transition: all 0.2s; text-align: center;
 }
 .machine-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 .machine-card.running { border-left: 4px solid var(--success); }
@@ -265,169 +752,89 @@ html, body {
 .machine-card-number { font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; }
 .machine-card-job { font-size: 11px; color: var(--accent); margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ---- TIME LOG ---- */
 .time-entry {
     display: flex; align-items: center; gap: 12px;
     padding: 12px; background: var(--bg-secondary);
-    border: 1px solid var(--border); border-radius: 8px;
-    margin-bottom: 8px;
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
 }
-.time-entry-icon {
-    width: 36px; height: 36px; border-radius: 8px;
-    background: rgba(59,130,246,0.1);
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-}
-.time-entry-icon svg { width: 18px; height: 18px; color: var(--accent); }
+.time-entry-icon { width: 36px; height: 36px; border-radius: 8px; background: rgba(59,130,246,0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 18px; color: var(--accent); }
 .time-entry-info { flex: 1; }
 .time-entry-job { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .time-entry-detail { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 .time-entry-hours { font-size: 16px; font-weight: 700; color: var(--accent); text-align: right; }
 .time-entry-date { font-size: 10px; color: var(--text-secondary); text-align: right; }
 
-/* ---- LOG HOURS FORM ---- */
-.log-form {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px; margin-bottom: 16px;
-}
+.log-form { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 .form-group { margin-bottom: 12px; }
 .form-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
 .form-select, .form-input {
     width: 100%; padding: 10px 12px;
     background: var(--bg-primary); border: 1px solid var(--border);
-    border-radius: 8px; color: var(--text-primary);
-    font-size: 14px; outline: none;
-    transition: border-color 0.2s;
+    border-radius: 8px; color: var(--text-primary); font-size: 14px; outline: none;
 }
 .form-select:focus, .form-input:focus { border-color: var(--accent); }
 .form-select option { background: var(--bg-primary); color: var(--text-primary); }
 
-/* ---- PROFILE / STATS ---- */
-.stats-grid {
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: 10px; margin-bottom: 16px;
-}
-.stat-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px; text-align: center;
-}
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.stat-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
 .stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); line-height: 1; }
 .stat-value.accent { color: var(--accent); }
 .stat-value.success { color: var(--success); }
 .stat-label { font-size: 11px; color: var(--text-secondary); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
 
-.profile-section {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden; margin-bottom: 12px;
-}
-.profile-row {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border);
-}
+.profile-section { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 12px; }
+.profile-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .profile-row:last-child { border-bottom: none; }
 .profile-row-label { font-size: 13px; color: var(--text-secondary); }
 .profile-row-value { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 
-/* ---- JOB DETAIL MODAL ---- */
 .modal-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(15,17,23,0.9);
-    z-index: 200; display: none;
-    align-items: flex-end; justify-content: center;
-    backdrop-filter: blur(4px);
+    background: rgba(15,17,23,0.9); z-index: 200; display: none;
+    align-items: flex-end; justify-content: center; backdrop-filter: blur(4px);
 }
 .modal-overlay.active { display: flex; }
 
 .modal-sheet {
-    background: var(--bg-secondary);
-    border-radius: 16px 16px 0 0;
-    width: 100%; max-width: 600px;
-    max-height: 85vh;
-    overflow-y: auto;
-    padding: 20px;
-    animation: slideUp 0.3s ease;
+    background: var(--bg-secondary); border-radius: 16px 16px 0 0;
+    width: 100%; max-width: 600px; max-height: 85vh;
+    overflow-y: auto; padding: 20px; animation: slideUp 0.3s ease;
 }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
-@keyframes slideUp {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
-}
-
-.modal-handle {
-    width: 36px; height: 4px;
-    background: var(--bg-tertiary);
-    border-radius: 2px;
-    margin: 0 auto 16px;
-}
-
+.modal-handle { width: 36px; height: 4px; background: var(--bg-tertiary); border-radius: 2px; margin: 0 auto 16px; }
 .modal-title { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
 .modal-subtitle { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
 
-.routing-step {
-    display: flex; gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border);
-    position: relative;
-}
+.routing-step { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .routing-step:last-child { border-bottom: none; }
-
-.routing-dot {
-    width: 28px; height: 28px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700; flex-shrink: 0;
-}
+.routing-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
 .routing-dot.complete { background: var(--success); color: white; }
 .routing-dot.in_progress { background: var(--accent); color: white; }
 .routing-dot.queued, .routing-dot.pending { background: var(--bg-tertiary); color: var(--text-secondary); }
-
 .routing-info { flex: 1; }
 .routing-wc { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .routing-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 .routing-hours { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
 
-/* ---- MACHINE STATUS MODAL ---- */
 .status-options { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
 .status-option {
     display: flex; align-items: center; gap: 12px;
-    padding: 14px 16px;
-    background: var(--bg-primary);
-    border: 2px solid var(--border);
-    border-radius: 10px; cursor: pointer;
-    transition: all 0.2s;
+    padding: 14px 16px; background: var(--bg-primary);
+    border: 2px solid var(--border); border-radius: 10px; cursor: pointer; transition: all 0.2s;
 }
 .status-option:hover { border-color: var(--accent); }
 .status-option.selected { border-color: var(--accent); background: rgba(59,130,246,0.05); }
-.status-option-dot {
-    width: 12px; height: 12px; border-radius: 50%;
-}
+.status-option-dot { width: 12px; height: 12px; border-radius: 50%; }
 .status-option-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
 
-/* ---- EMPTY STATE ---- */
-.empty-state {
-    text-align: center; padding: 40px 20px;
-    color: var(--text-secondary);
-}
-.empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.5; }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-secondary); }
 .empty-state p { font-size: 14px; }
 
-/* ---- LOADING ---- */
 .loading { text-align: center; padding: 40px; color: var(--text-secondary); }
-.spinner {
-    width: 32px; height: 32px; border: 3px solid var(--border);
-    border-top-color: var(--accent); border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin: 0 auto 12px;
-}
+.spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---- TOAST ---- */
 .toast {
     position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
     background: var(--bg-secondary); border: 1px solid var(--border);
@@ -440,29 +847,23 @@ html, body {
 .toast.error { border-color: var(--danger); }
 .toast.show { opacity: 1; }
 
-/* ---- LINK TO DASHBOARD ---- */
 .dashboard-link {
     display: flex; align-items: center; justify-content: center; gap: 8px;
     padding: 12px; margin-top: 8px;
     background: var(--bg-secondary); border: 1px solid var(--border);
     border-radius: 10px; color: var(--accent);
     text-decoration: none; font-size: 13px; font-weight: 600;
-    transition: background 0.2s;
 }
 .dashboard-link:hover { background: rgba(59,130,246,0.05); }
 
-/* Desktop widths */
 @media (min-width: 768px) {
-    .main-content { max-width: 600px; margin: 0 auto; left: 0; right: 0; }
-    .bottom-tabs { max-width: 600px; margin: 0 auto; left: 0; right: 0; }
-    .modal-sheet { border-radius: 16px; margin-bottom: 20px; }
-    .modal-overlay { align-items: center; }
+    .main-content { max-width: 600px; margin: 0 auto; }
+    .bottom-tabs { max-width: 600px; margin: 0 auto; left: 50%; transform: translateX(-50%); }
 }
     </style>
 </head>
 <body>
 
-<!-- HEADER -->
 <div class="header">
     <div class="header-left">
         <div class="header-avatar" id="userAvatar">?</div>
@@ -474,17 +875,13 @@ html, body {
     <button class="clock-btn clock-in" id="clockBtn" onclick="toggleClock()">Clock In</button>
 </div>
 
-<!-- MAIN CONTENT -->
 <div class="main-content">
-
-    <!-- ===== MY TASKS TAB ===== -->
     <div class="tab-content active" id="tab-tasks">
         <div id="activeTaskArea"></div>
         <div class="section-header">My Operations</div>
         <div id="myOperations"><div class="loading"><div class="spinner"></div>Loading tasks...</div></div>
     </div>
 
-    <!-- ===== MACHINES TAB ===== -->
     <div class="tab-content" id="tab-machines">
         <div class="section-header">
             Shop Floor Machines
@@ -493,7 +890,6 @@ html, body {
         <div id="machineList"><div class="loading"><div class="spinner"></div>Loading machines...</div></div>
     </div>
 
-    <!-- ===== TIME LOG TAB ===== -->
     <div class="tab-content" id="tab-time">
         <div class="section-header">Log Hours</div>
         <div class="log-form" id="logForm">
@@ -505,11 +901,11 @@ html, body {
             </div>
             <div class="form-group">
                 <label class="form-label">Hours Worked</label>
-                <input type="number" class="form-input" id="logHours" placeholder="e.g. 2.5" step="0.25" min="0" max="24">
+                <input type="number" class="form-input" id="logHours" placeholder="e.g. 2.5" step="0.25" min="0" max="24" />
             </div>
             <div class="form-group">
                 <label class="form-label">Notes (optional)</label>
-                <input type="text" class="form-input" id="logNotes" placeholder="What did you work on?">
+                <input type="text" class="form-input" id="logNotes" placeholder="What did you work on?" />
             </div>
             <button class="action-btn primary full" onclick="submitTimeLog()" style="margin-top:4px;">Log Hours</button>
         </div>
@@ -517,7 +913,6 @@ html, body {
         <div id="timeEntries"><div class="loading"><div class="spinner"></div>Loading...</div></div>
     </div>
 
-    <!-- ===== PROFILE TAB ===== -->
     <div class="tab-content" id="tab-profile">
         <div class="section-header">This Week</div>
         <div class="stats-grid" id="weeklyStats">
@@ -537,20 +932,18 @@ html, body {
         </div>
 
         <a href="/x_1964226_svem_com_dashboard.do" class="dashboard-link">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-            Open Ops Dashboard
+            &#9638;&#9638; Open Ops Dashboard
         </a>
     </div>
 </div>
 
-<!-- BOTTOM TABS -->
 <div class="bottom-tabs">
     <button class="tab-btn active" onclick="switchTab('tasks', this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         My Tasks
     </button>
     <button class="tab-btn" onclick="switchTab('machines', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4m4 0h4"/><circle cx="6" cy="12" r="1" fill="currentColor"/><circle cx="18" cy="12" r="1" fill="currentColor"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="14" y1="12" x2="18" y2="12"/></svg>
         Machines
     </button>
     <button class="tab-btn" onclick="switchTab('time', this)">
@@ -563,12 +956,11 @@ html, body {
     </button>
 </div>
 
-<!-- JOB DETAIL MODAL -->
 <div class="modal-overlay" id="jobDetailModal" onclick="closeModal('jobDetailModal')">
     <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-handle"></div>
         <div class="modal-title" id="modalJobNumber">JOB-0001</div>
-        <div class="modal-subtitle" id="modalJobInfo">Customer - PO#</div>
+        <div class="modal-subtitle" id="modalJobInfo"></div>
         <div class="section-header">Job Routing</div>
         <div id="modalRouting"></div>
         <div style="margin-top:16px;">
@@ -577,24 +969,23 @@ html, body {
     </div>
 </div>
 
-<!-- MACHINE STATUS MODAL -->
 <div class="modal-overlay" id="machineModal" onclick="closeModal('machineModal')">
     <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-handle"></div>
         <div class="modal-title" id="machineModalName">Machine</div>
-        <div class="modal-subtitle" id="machineModalInfo">Status</div>
+        <div class="modal-subtitle" id="machineModalInfo"></div>
         <div class="section-header">Update Status</div>
         <div class="status-options">
-            <div class="status-option" onclick="selectMachineStatus('running')">
-                <div class="status-option-dot" style="background:var(--success)"></div>
+            <div class="status-option" onclick="selectMachineStatus('running', this)">
+                <div class="status-option-dot" style="background:#22C55E"></div>
                 <div class="status-option-label">Running</div>
             </div>
-            <div class="status-option" onclick="selectMachineStatus('idle')">
-                <div class="status-option-dot" style="background:var(--text-secondary)"></div>
+            <div class="status-option" onclick="selectMachineStatus('idle', this)">
+                <div class="status-option-dot" style="background:#8B8D97"></div>
                 <div class="status-option-label">Idle</div>
             </div>
-            <div class="status-option" onclick="selectMachineStatus('maintenance')">
-                <div class="status-option-dot" style="background:var(--danger)"></div>
+            <div class="status-option" onclick="selectMachineStatus('maintenance', this)">
+                <div class="status-option-dot" style="background:#EF4444"></div>
                 <div class="status-option-label">Maintenance</div>
             </div>
         </div>
@@ -603,540 +994,23 @@ html, body {
     </div>
 </div>
 
-<!-- TOAST -->
 <div class="toast" id="toast"></div>
-
-<script>
-// ============================================
-// SVEM EMPLOYEE PORTAL - Application Logic
-// ============================================
-
-const API_BASE = '/api/now/table';
-const HEADERS = {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    'X-UserToken': window.g_ck || ''
-};
-
-// State
-let currentUser = null;
-let staffRecord = null;
-let myOperations = [];
-let allMachines = [];
-let allJobs = [];
-let activeTimer = null;
-let timerStart = null;
-let timerElapsed = 0;
-let selectedMachineSysId = null;
-let selectedMachineStatus = null;
-let clockedIn = false;
-
-// ---- INIT ----
-document.addEventListener('DOMContentLoaded', init);
-
-async function init() {
-    try {
-        await loadCurrentUser();
-        await Promise.all([loadMyOperations(), loadMachines(), loadJobs()]);
-        renderTasks();
-        renderMachines();
-        renderTimeLog();
-        renderProfile();
-    } catch(e) {
-        console.error('Init error:', e);
-    }
-}
-
-// ---- API HELPERS ----
-async function apiGet(table, params) {
-    const url = new URL(API_BASE + '/' + table, window.location.origin);
-    if (params) Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
-    const res = await fetch(url, { method: 'GET', headers: HEADERS });
-    if (!res.ok) throw new Error('API error: ' + res.status);
-    return (await res.json()).result || [];
-}
-
-async function apiPatch(table, sysId, data) {
-    const res = await fetch(API_BASE + '/' + table + '/' + sysId, {
-        method: 'PATCH', headers: HEADERS, body: JSON.stringify(data)
-    });
-    if (!res.ok) throw new Error('API error: ' + res.status);
-    return (await res.json()).result;
-}
-
-function extractVal(field) {
-    if (!field) return '';
-    if (typeof field === 'object') return field.display_value || field.value || '';
-    return field;
-}
-
-function extractSysId(field) {
-    if (!field) return '';
-    if (typeof field === 'object') return field.value || '';
-    return field;
-}
-
-// ---- LOAD DATA ----
-async function loadCurrentUser() {
-    // Get current logged-in user
-    const users = await apiGet('sys_user', {
-        sysparm_query: 'user_name=' + (window.NOW && window.NOW.user ? window.NOW.user.name : 'admin'),
-        sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,name,user_name,title',
-        sysparm_limit: '1'
-    });
-    currentUser = users[0] || null;
-
-    // Try to find matching staff record
-    if (currentUser) {
-        const staff = await apiGet('x_1964226_svem_com_staff', {
-            sysparm_display_value: 'all',
-            sysparm_fields: 'sys_id,name,employee_id,role,shift,status,current_job,current_machine,current_operation,jobs_completed_this_week',
-            sysparm_limit: '100'
-        });
-        // Match by name (best effort)
-        const userName = extractVal(currentUser.name);
-        staffRecord = staff.find(s => extractVal(s.name) === userName) || staff[0] || null;
-
-        // Update header
-        const name = staffRecord ? extractVal(staffRecord.name) : userName;
-        document.getElementById('userName').textContent = name || 'Employee';
-        document.getElementById('userAvatar').textContent = name ? name.charAt(0).toUpperCase() : '?';
-        const role = staffRecord ? extractVal(staffRecord.role) : '';
-        document.getElementById('userRole').textContent = role ? formatRole(role) + ' \u2022 SVEM' : 'SVEM Employee Portal';
-
-        // Clock status
-        if (staffRecord) {
-            const status = extractVal(staffRecord.status);
-            clockedIn = (status === 'available' || status === 'assigned');
-            updateClockBtn();
-        }
-    }
-}
-
-async function loadMyOperations() {
-    myOperations = await apiGet('x_1964226_svem_com_operations', {
-        sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,job,sequence,work_center,description,op_status,preferred_machine,completed_by,started_date,completed_date,estimated_hours,actual_hours,process_name',
-        sysparm_query: 'op_status!=complete^ORDERBYsequence',
-        sysparm_limit: '50'
-    });
-}
-
-async function loadMachines() {
-    allMachines = await apiGet('x_1964226_svem_com_machines', {
-        sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,machine_name,machine_number,machine_type,status,current_job,current_operation,uptime_percentage',
-        sysparm_limit: '50'
-    });
-}
-
-async function loadJobs() {
-    allJobs = await apiGet('x_1964226_svem_com_jobs', {
-        sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,job_number,po_number,customer,job_status,priority,percent_complete,customer_due_date,quantity_due,assigned_machine',
-        sysparm_limit: '100'
-    });
-}
-
-// ---- RENDER: TASKS ----
-function renderTasks() {
-    const container = document.getElementById('myOperations');
-    const activeArea = document.getElementById('activeTaskArea');
-
-    // Find active (in_progress) operation
-    const activeOp = myOperations.find(op => extractVal(op.op_status) === 'in_progress');
-
-    if (activeOp) {
-        const jobName = extractVal(activeOp.job);
-        const wc = extractVal(activeOp.work_center) || extractVal(activeOp.process_name);
-        activeArea.innerHTML = '<div class="active-task">' +
-            '<div class="active-task-label">\u25b6 Currently Working On</div>' +
-            '<div class="active-task-job">' + escHtml(jobName) + '</div>' +
-            '<div class="active-task-op">Step ' + extractVal(activeOp.sequence) + ' \u2022 ' + escHtml(wc).toUpperCase() + '</div>' +
-            '<div class="active-task-timer" id="taskTimer">00:00:00</div>' +
-            '<div class="active-task-actions">' +
-                '<button class="action-btn warning" onclick="pauseOperation(\'' + extractSysId(activeOp.sys_id) + '\')">Pause</button>' +
-                '<button class="action-btn success" onclick="completeOperation(\'' + extractSysId(activeOp.sys_id) + '\')">Complete</button>' +
-            '</div>' +
-        '</div>';
-        startTimer();
-    } else {
-        activeArea.innerHTML = '';
-        stopTimer();
-    }
-
-    // Pending operations
-    const pending = myOperations.filter(op => extractVal(op.op_status) !== 'in_progress');
-
-    if (pending.length === 0 && !activeOp) {
-        container.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><p>No pending operations</p></div>';
-        return;
-    }
-
-    container.innerHTML = pending.map(op => {
-        const status = extractVal(op.op_status) || 'queued';
-        const jobName = extractVal(op.job);
-        const wc = extractVal(op.work_center) || extractVal(op.process_name) || '--';
-        const estHours = extractVal(op.estimated_hours);
-        const sysId = extractSysId(op.sys_id);
-
-        return '<div class="op-item" onclick="showOperationActions(\'' + sysId + '\')">' +
-            '<div class="op-seq">' + extractVal(op.sequence) + '</div>' +
-            '<div class="op-info">' +
-                '<div class="op-name">' + escHtml(wc).toUpperCase() + '</div>' +
-                '<div class="op-meta"><span>' + escHtml(jobName) + '</span>' + (estHours ? '<span>' + estHours + 'h est.</span>' : '') + '</div>' +
-            '</div>' +
-            '<span class="badge ' + status + '">' + status.replace('_', ' ') + '</span>' +
-        '</div>';
-    }).join('');
-}
-
-// ---- RENDER: MACHINES ----
-function renderMachines() {
-    const container = document.getElementById('machineList');
-    const runCount = allMachines.filter(m => extractVal(m.status) === 'running').length;
-    document.getElementById('machineCount').textContent = runCount + '/' + allMachines.length + ' running';
-
-    if (allMachines.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No machines found</p></div>';
-        return;
-    }
-
-    container.innerHTML = '<div class="machine-grid">' + allMachines.map(m => {
-        const status = extractVal(m.status) || 'idle';
-        const name = extractVal(m.machine_name);
-        const number = extractVal(m.machine_number);
-        const job = extractVal(m.current_job);
-        const sysId = extractSysId(m.sys_id);
-
-        return '<div class="machine-card ' + status + '" onclick="openMachineModal(\'' + sysId + '\')">' +
-            '<div class="machine-card-name">' + escHtml(name) + '</div>' +
-            '<div class="machine-card-number">' + escHtml(number) + '</div>' +
-            '<span class="badge ' + status + '">' + status + '</span>' +
-            (job ? '<div class="machine-card-job">' + escHtml(job) + '</div>' : '') +
-        '</div>';
-    }).join('') + '</div>';
-}
-
-// ---- RENDER: TIME LOG ----
-function renderTimeLog() {
-    // Populate operation selector
-    const select = document.getElementById('logOperation');
-    select.innerHTML = '<option value="">Select an operation...</option>' +
-        myOperations.map(op => {
-            const wc = extractVal(op.work_center) || extractVal(op.process_name);
-            const job = extractVal(op.job);
-            return '<option value="' + extractSysId(op.sys_id) + '">' + escHtml(job) + ' - ' + escHtml(wc) + '</option>';
-        }).join('');
-
-    // Show recent time entries (operations with actual_hours > 0)
-    const logged = myOperations.filter(op => parseFloat(extractVal(op.actual_hours)) > 0)
-        .concat(allJobs.filter(j => extractVal(j.job_status) === 'complete').slice(0, 5).map(j => ({
-            job: j.job_number, work_center: {display_value: 'Completed Job'}, actual_hours: {display_value: '--'},
-            completed_date: j.customer_due_date
-        })));
-
-    const container = document.getElementById('timeEntries');
-
-    // Show operations with hours
-    const opsWithHours = myOperations.filter(op => parseFloat(extractVal(op.actual_hours)) > 0);
-
-    if (opsWithHours.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No time entries yet. Log your first hours above!</p></div>';
-        return;
-    }
-
-    container.innerHTML = opsWithHours.map(op => {
-        const job = extractVal(op.job);
-        const wc = extractVal(op.work_center) || extractVal(op.process_name);
-        const hours = extractVal(op.actual_hours);
-        const date = extractVal(op.started_date) || '';
-
-        return '<div class="time-entry">' +
-            '<div class="time-entry-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>' +
-            '<div class="time-entry-info">' +
-                '<div class="time-entry-job">' + escHtml(job) + '</div>' +
-                '<div class="time-entry-detail">' + escHtml(wc) + '</div>' +
-            '</div>' +
-            '<div><div class="time-entry-hours">' + hours + 'h</div>' +
-            '<div class="time-entry-date">' + (date ? date.split(' ')[0] : '') + '</div></div>' +
-        '</div>';
-    }).join('');
-}
-
-// ---- RENDER: PROFILE ----
-function renderProfile() {
-    if (!staffRecord) return;
-
-    document.getElementById('profileEmpId').textContent = extractVal(staffRecord.employee_id) || '--';
-    document.getElementById('profileRole').textContent = formatRole(extractVal(staffRecord.role));
-    document.getElementById('profileShift').textContent = (extractVal(staffRecord.shift) || '--').toUpperCase();
-    document.getElementById('profileStatus').innerHTML = '<span class="badge ' + extractVal(staffRecord.status) + '">' + extractVal(staffRecord.status) + '</span>';
-    document.getElementById('profileMachine').textContent = extractVal(staffRecord.current_machine) || 'None';
-
-    // Stats
-    document.getElementById('statJobsCompleted').textContent = extractVal(staffRecord.jobs_completed_this_week) || '0';
-    const totalHours = myOperations.reduce((sum, op) => sum + (parseFloat(extractVal(op.actual_hours)) || 0), 0);
-    document.getElementById('statHoursLogged').textContent = totalHours.toFixed(1);
-    const completedOps = myOperations.filter(op => extractVal(op.op_status) === 'complete').length;
-    document.getElementById('statOpsCompleted').textContent = completedOps;
-    document.getElementById('statCurrentStreak').textContent = Math.min(parseInt(extractVal(staffRecord.jobs_completed_this_week)) || 0, 5);
-}
-
-// ---- ACTIONS ----
-async function showOperationActions(sysId) {
-    const op = myOperations.find(o => extractSysId(o.sys_id) === sysId);
-    if (!op) return;
-
-    const status = extractVal(op.op_status);
-    if (status === 'queued' || status === 'pending') {
-        if (confirm('Start working on this operation?')) {
-            await startOperation(sysId);
-        }
-    } else {
-        // Show job detail
-        openJobDetail(op);
-    }
-}
-
-async function startOperation(sysId) {
-    try {
-        await apiPatch('x_1964226_svem_com_operations', sysId, {
-            op_status: 'in_progress',
-            started_date: new Date().toISOString().replace('T', ' ').split('.')[0]
-        });
-        showToast('Operation started!', 'success');
-        await loadMyOperations();
-        renderTasks();
-        renderTimeLog();
-    } catch(e) {
-        showToast('Error starting operation', 'error');
-    }
-}
-
-async function pauseOperation(sysId) {
-    try {
-        await apiPatch('x_1964226_svem_com_operations', sysId, { op_status: 'on_hold' });
-        showToast('Operation paused', 'success');
-        await loadMyOperations();
-        renderTasks();
-    } catch(e) {
-        showToast('Error pausing operation', 'error');
-    }
-}
-
-async function completeOperation(sysId) {
-    if (!confirm('Mark this operation as complete?')) return;
-    try {
-        const elapsed = timerElapsed / 3600;
-        const patchData = {
-            op_status: 'complete',
-            completed_date: new Date().toISOString().replace('T', ' ').split('.')[0]
-        };
-        if (elapsed > 0) patchData.actual_hours = elapsed.toFixed(2);
-
-        await apiPatch('x_1964226_svem_com_operations', sysId, patchData);
-        showToast('Operation completed!', 'success');
-        stopTimer();
-        await loadMyOperations();
-        renderTasks();
-        renderTimeLog();
-    } catch(e) {
-        showToast('Error completing operation', 'error');
-    }
-}
-
-async function submitTimeLog() {
-    const opId = document.getElementById('logOperation').value;
-    const hours = parseFloat(document.getElementById('logHours').value);
-    const notes = document.getElementById('logNotes').value;
-
-    if (!opId) { showToast('Please select an operation', 'error'); return; }
-    if (!hours || hours <= 0) { showToast('Please enter valid hours', 'error'); return; }
-
-    try {
-        const op = myOperations.find(o => extractSysId(o.sys_id) === opId);
-        const existing = parseFloat(extractVal(op.actual_hours)) || 0;
-        const patchData = { actual_hours: (existing + hours).toFixed(2) };
-        if (notes) patchData.notes = notes;
-
-        await apiPatch('x_1964226_svem_com_operations', opId, patchData);
-        showToast(hours + ' hours logged!', 'success');
-        document.getElementById('logHours').value = '';
-        document.getElementById('logNotes').value = '';
-        await loadMyOperations();
-        renderTimeLog();
-        renderProfile();
-    } catch(e) {
-        showToast('Error logging hours', 'error');
-    }
-}
-
-// ---- CLOCK IN/OUT ----
-async function toggleClock() {
-    if (!staffRecord) { showToast('Staff record not found', 'error'); return; }
-    const newStatus = clockedIn ? 'off' : 'available';
-    try {
-        await apiPatch('x_1964226_svem_com_staff', extractSysId(staffRecord.sys_id), { status: newStatus });
-        clockedIn = !clockedIn;
-        staffRecord.status = { display_value: newStatus, value: newStatus };
-        updateClockBtn();
-        renderProfile();
-        showToast(clockedIn ? 'Clocked in!' : 'Clocked out!', 'success');
-    } catch(e) {
-        showToast('Error updating status', 'error');
-    }
-}
-
-function updateClockBtn() {
-    const btn = document.getElementById('clockBtn');
-    if (clockedIn) {
-        btn.textContent = 'Clock Out';
-        btn.className = 'clock-btn clock-out';
-    } else {
-        btn.textContent = 'Clock In';
-        btn.className = 'clock-btn clock-in';
-    }
-}
-
-// ---- MACHINE MODAL ----
-function openMachineModal(sysId) {
-    const machine = allMachines.find(m => extractSysId(m.sys_id) === sysId);
-    if (!machine) return;
-
-    selectedMachineSysId = sysId;
-    selectedMachineStatus = extractVal(machine.status);
-
-    document.getElementById('machineModalName').textContent = extractVal(machine.machine_name);
-    document.getElementById('machineModalInfo').textContent = extractVal(machine.machine_number) + ' \u2022 ' + extractVal(machine.machine_type);
-
-    // Highlight current status
-    document.querySelectorAll('.status-option').forEach(el => el.classList.remove('selected'));
-    const current = document.querySelector('.status-option[onclick*="' + selectedMachineStatus + '"]');
-    if (current) current.classList.add('selected');
-
-    document.getElementById('machineModal').classList.add('active');
-}
-
-function selectMachineStatus(status) {
-    selectedMachineStatus = status;
-    document.querySelectorAll('.status-option').forEach(el => el.classList.remove('selected'));
-    event.currentTarget.classList.add('selected');
-}
-
-async function saveMachineStatus() {
-    if (!selectedMachineSysId || !selectedMachineStatus) return;
-    try {
-        await apiPatch('x_1964226_svem_com_machines', selectedMachineSysId, { status: selectedMachineStatus });
-        showToast('Machine status updated!', 'success');
-        closeModal('machineModal');
-        await loadMachines();
-        renderMachines();
-    } catch(e) {
-        showToast('Error updating machine', 'error');
-    }
-}
-
-// ---- JOB DETAIL ----
-function openJobDetail(op) {
-    const jobRef = extractVal(op.job);
-    document.getElementById('modalJobNumber').textContent = jobRef;
-    document.getElementById('modalJobInfo').textContent = extractVal(op.work_center) || '';
-
-    // Get all operations for this job
-    const jobOps = myOperations.filter(o => extractVal(o.job) === jobRef)
-        .sort((a, b) => parseInt(extractVal(a.sequence)) - parseInt(extractVal(b.sequence)));
-
-    document.getElementById('modalRouting').innerHTML = jobOps.map(o => {
-        const status = extractVal(o.op_status) || 'queued';
-        const wc = extractVal(o.work_center) || extractVal(o.process_name) || '--';
-        const est = extractVal(o.estimated_hours);
-        const actual = extractVal(o.actual_hours);
-
-        return '<div class="routing-step">' +
-            '<div class="routing-dot ' + status + '">' + extractVal(o.sequence) + '</div>' +
-            '<div class="routing-info">' +
-                '<div class="routing-wc">' + escHtml(wc).toUpperCase() + '</div>' +
-                '<div class="routing-desc">' + escHtml(extractVal(o.description) || 'No description') + '</div>' +
-                '<div class="routing-hours">' + (est ? 'Est: ' + est + 'h' : '') + (actual ? ' \u2022 Actual: ' + actual + 'h' : '') + '</div>' +
-            '</div>' +
-            '<span class="badge ' + status + '">' + status.replace('_', ' ') + '</span>' +
-        '</div>';
-    }).join('') || '<div class="empty-state"><p>No routing steps found</p></div>';
-
-    document.getElementById('jobDetailModal').classList.add('active');
-}
-
-// ---- TIMER ----
-function startTimer() {
-    if (activeTimer) return;
-    timerStart = Date.now();
-    timerElapsed = 0;
-    activeTimer = setInterval(() => {
-        timerElapsed = (Date.now() - timerStart) / 1000;
-        const h = Math.floor(timerElapsed / 3600);
-        const m = Math.floor((timerElapsed % 3600) / 60);
-        const s = Math.floor(timerElapsed % 60);
-        const el = document.getElementById('taskTimer');
-        if (el) el.textContent = pad(h) + ':' + pad(m) + ':' + pad(s);
-    }, 1000);
-}
-
-function stopTimer() {
-    if (activeTimer) { clearInterval(activeTimer); activeTimer = null; }
-    timerElapsed = 0;
-}
-
-function pad(n) { return n.toString().padStart(2, '0'); }
-
-// ---- UI HELPERS ----
-function switchTab(tabName, btn) {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-    document.getElementById('tab-' + tabName).classList.add('active');
-    btn.classList.add('active');
-}
-
-function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-
-function showToast(msg, type) {
-    const toast = document.getElementById('toast');
-    toast.textContent = msg;
-    toast.className = 'toast ' + (type || '') + ' show';
-    setTimeout(() => toast.classList.remove('show'), 2500);
-}
-
-function formatRole(role) {
-    const map = {
-        operator: 'Operator', setup_operator: 'Setup Operator', qc_technician: 'QC Technician',
-        programmer: 'Programmer', deburr_operator: 'Deburr Operator', material_handler: 'Material Handler',
-        driver: 'Driver', shipping_technician: 'Shipping Tech'
-    };
-    return map[role] || (role || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function escHtml(s) {
-    if (!s) return '';
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-</script>
 
 </body>
 </html>]]></html>
-        <name>x_1964226_svem_com_employee_portal</name>
+        <name>employee_portal</name>
         <processing_script/>
         <sys_class_name>sys_ui_page</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-12 23:50:00</sys_created_on>
         <sys_id>a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5e7</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_name>x_1964226_svem_com_employee_portal</sys_name>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>employee_portal</sys_name>
         <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
         <sys_policy/>
         <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
         <sys_update_name>sys_ui_page_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5e7</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-04-12 23:50:00</sys_updated_on>
+        <sys_updated_on>2026-04-12 23:55:00</sys_updated_on>
     </sys_ui_page>
 </record_update>
