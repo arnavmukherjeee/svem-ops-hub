@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_translated_text">
+    <sys_translated_text action="INSERT_OR_UPDATE">
+        <documentkey>sys_dictionary_x_1964226_svem_com_deliveries_ship_by_date</documentkey>
+        <fieldname>column_label</fieldname>
+        <language>zh</language>
+        <tablename>sys_dictionary</tablename>
+        <value>发货日期</value>
+        <sys_class_name>sys_translated_text</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-13 01:00:00</sys_created_on>
+        <sys_id>06a7c54b87bd862d09f03841bec73aa6</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>发货日期</sys_name>
+        <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+        <sys_update_name>sys_translated_text_06a7c54b87bd862d09f03841bec73aa6</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-13 01:00:00</sys_updated_on>
+    </sys_translated_text>
+</record_update>
