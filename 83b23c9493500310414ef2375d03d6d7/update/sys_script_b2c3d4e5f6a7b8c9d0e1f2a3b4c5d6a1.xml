@@ -11,14 +11,14 @@
         <advanced>true</advanced>
         <change_fields>false</change_fields>
         <client_callable>false</client_callable>
-        <collection>x_1964226_svem_com_jobs</collection>
+        <collection>x_1964226_svem_com_deliveries</collection>
         <condition/>
         <description/>
         <execute_function>false</execute_function>
         <filter_condition/>
         <is_rest>false</is_rest>
         <message/>
-        <name>Auto Generate Job Number</name>
+        <name>Auto Generate Delivery ID</name>
         <order>100</order>
         <priority>100</priority>
         <rest_method/>
@@ -28,9 +28,9 @@
         <rest_variables/>
         <role_conditions/>
         <script><![CDATA[(function executeRule(current, previous) {
-    if (!current.job_number || current.job_number == '') {
-        var prefix = 'JOB';
-        var gr = new GlideAggregate('x_1964226_svem_com_jobs');
+    if (!current.delivery_id || current.delivery_id == '') {
+        var prefix = 'DEL';
+        var gr = new GlideAggregate('x_1964226_svem_com_deliveries');
         gr.addAggregate('COUNT');
         gr.query();
         var count = 0;
@@ -38,29 +38,26 @@
             count = parseInt(gr.getAggregate('COUNT')) || 0;
         }
         var nextNum = count + 1;
-        current.job_number = prefix + '-' + ('0000' + nextNum).slice(-4);
-    }
-    if (!current.po_number || current.po_number == '') {
-        current.po_number = 'PO-' + new GlideDateTime().getNumericValue().toString().slice(-8);
+        current.delivery_id = prefix + '-' + ('0000' + nextNum).slice(-4);
     }
 })(current, previous);]]></script>
         <sys_class_name>sys_script</sys_class_name>
         <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2026-04-12 23:09:37</sys_created_on>
+        <sys_created_on>2026-04-12 23:30:00</sys_created_on>
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
-        <sys_id>fafb8b20bd5d4ffabe8c70be1db24118</sys_id>
+        <sys_id>b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a1</sys_id>
         <sys_mod_count>0</sys_mod_count>
-        <sys_name>Auto Generate Job Number</sys_name>
+        <sys_name>Auto Generate Delivery ID</sys_name>
         <sys_overrides/>
         <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
         <sys_policy/>
         <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
-        <sys_update_name>sys_script_fafb8b20bd5d4ffabe8c70be1db24118</sys_update_name>
+        <sys_update_name>sys_script_b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a1</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-04-12 23:09:37</sys_updated_on>
+        <sys_updated_on>2026-04-12 23:30:00</sys_updated_on>
         <template/>
         <when>before</when>
     </sys_script>
-    <sys_translated_text action="delete_multiple" query="documentkey=fafb8b20bd5d4ffabe8c70be1db24118"/>
+    <sys_translated_text action="delete_multiple" query="documentkey=b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a1"/>
 </record_update>
