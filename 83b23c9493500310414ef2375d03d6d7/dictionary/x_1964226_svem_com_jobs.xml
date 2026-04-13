@@ -4,11 +4,12 @@
         <element attributes="edge_encryption_enabled=true" display="true" label="Job Number" mandatory="true" max_length="40" name="job_number" type="string" unique="true"/>
         <element choice="1" default="not_started" label="Job Status" max_length="40" name="job_status" type="choice">
             <choice>
-                <element inactive_on_update="false" label="In Progress" sequence="1" value="in_progress"/>
-                <element inactive_on_update="false" label="On Hold" sequence="2" value="on_hold"/>
-                <element inactive_on_update="false" label="Complete" sequence="3" value="complete"/>
                 <element inactive_on_update="false" label="Not Started" sequence="0" value="not_started"/>
-                <element inactive_on_update="false" label="Shipped" sequence="4" value="shipped"/>
+                <element inactive_on_update="false" label="Assigned" sequence="1" value="assigned"/>
+                <element inactive_on_update="false" label="In Progress" sequence="2" value="in_progress"/>
+                <element inactive_on_update="false" label="Pending Review" sequence="3" value="pending_review"/>
+                <element inactive_on_update="false" label="Complete" sequence="4" value="complete"/>
+                <element inactive_on_update="false" label="Shipped" sequence="5" value="shipped"/>
             </choice>
         </element>
         <element attributes="edge_encryption_enabled=true" label="Notes" max_length="4000" name="notes" type="string"/>
@@ -46,8 +47,12 @@
             </choice>
         </element>
         <element attributes="encode_utf8=false" label="Assigned Machine" max_length="32" name="assigned_machine" reference="x_1964226_svem_com_machines" type="reference"/>
+        <element attributes="encode_utf8=false" label="Assigned To" max_length="32" name="assigned_to" reference="x_1964226_svem_com_staff" type="reference"/>
         <index name="index">
             <element name="assigned_machine"/>
+        </index>
+        <index name="index5">
+            <element name="assigned_to"/>
         </index>
         <index name="index2">
             <element name="current_operation"/>

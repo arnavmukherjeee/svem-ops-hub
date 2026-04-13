@@ -39,10 +39,29 @@
             <element>job_status</element>
             <hint/>
             <inactive>false</inactive>
-            <label>In Progress</label>
+            <label>Assigned</label>
             <language>en</language>
             <name>x_1964226_svem_com_jobs</name>
             <sequence>1</sequence>
+            <synonyms/>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2026-04-13 08:00:00</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2026-04-13 08:00:00</sys_updated_on>
+            <value>assigned</value>
+        </sys_choice>
+        <sys_choice action="INSERT_OR_UPDATE">
+            <dependent_value/>
+            <element>job_status</element>
+            <hint/>
+            <inactive>false</inactive>
+            <label>In Progress</label>
+            <language>en</language>
+            <name>x_1964226_svem_com_jobs</name>
+            <sequence>2</sequence>
             <synonyms/>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 21:56:42</sys_created_on>
@@ -58,19 +77,19 @@
             <element>job_status</element>
             <hint/>
             <inactive>false</inactive>
-            <label>On Hold</label>
+            <label>Pending Review</label>
             <language>en</language>
             <name>x_1964226_svem_com_jobs</name>
-            <sequence>2</sequence>
+            <sequence>3</sequence>
             <synonyms/>
             <sys_created_by>admin</sys_created_by>
-            <sys_created_on>2026-04-12 21:56:42</sys_created_on>
+            <sys_created_on>2026-04-13 08:00:00</sys_created_on>
             <sys_domain>global</sys_domain>
             <sys_domain_path>/</sys_domain_path>
             <sys_mod_count>0</sys_mod_count>
             <sys_updated_by>admin</sys_updated_by>
-            <sys_updated_on>2026-04-12 21:56:42</sys_updated_on>
-            <value>on_hold</value>
+            <sys_updated_on>2026-04-13 08:00:00</sys_updated_on>
+            <value>pending_review</value>
         </sys_choice>
         <sys_choice action="INSERT_OR_UPDATE">
             <dependent_value/>
@@ -80,7 +99,7 @@
             <label>Complete</label>
             <language>en</language>
             <name>x_1964226_svem_com_jobs</name>
-            <sequence>3</sequence>
+            <sequence>4</sequence>
             <synonyms/>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 21:56:42</sys_created_on>
@@ -99,7 +118,7 @@
             <label>Shipped</label>
             <language>en</language>
             <name>x_1964226_svem_com_jobs</name>
-            <sequence>4</sequence>
+            <sequence>5</sequence>
             <synonyms/>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 21:56:42</sys_created_on>

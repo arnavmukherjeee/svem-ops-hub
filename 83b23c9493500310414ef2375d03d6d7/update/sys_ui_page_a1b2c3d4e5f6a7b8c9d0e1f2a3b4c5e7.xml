@@ -3,7 +3,7 @@
         <category>general</category>
         <client_script><![CDATA[
 // ============================================
-// SVEM EMPLOYEE PORTAL v2 - Role-Based System
+// SVEM EMPLOYEE PORTAL v3 - Jobs-Based System
 // ============================================
 
 var API_BASE = '/api/now/table';
@@ -19,10 +19,9 @@ var currentUserName = window._svemUserName || 'admin';
 var currentUserFullName = window._svemFullName || '';
 var staffRecord = null;
 var allStaff = [];
-var myOperations = [];
-var allOperations = [];
-var allMachines = [];
+var myJobs = [];
 var allJobs = [];
+var allMachines = [];
 var activeTimer = null;
 var timerStart = null;
 var timerElapsed = 0;
@@ -48,9 +47,9 @@ function setupRoleUI() {
     // Update tab grid columns
     var bottomTabs = document.getElementById('bottomTabs');
     if (isManager) {
-        bottomTabs.style.gridTemplateColumns = 'repeat(7, 1fr)';
+        bottomTabs.style.gridTemplateColumns = 'repeat(6, 1fr)';
     } else {
-        bottomTabs.style.gridTemplateColumns = 'repeat(4, 1fr)';
+        bottomTabs.style.gridTemplateColumns = 'repeat(3, 1fr)';
     }
     // Update role badge in header
     var roleBadge = document.getElementById('roleBadge');
@@ -62,13 +61,11 @@ function setupRoleUI() {
 
 function portalInit() {
     loadAllStaff().then(function() {
-        return Promise.all([loadAllOperations(), loadMachines(), loadJobs()]);
+        return Promise.all([loadMachines(), loadJobs()]);
     }).then(function() {
-        // Filter my operations
-        filterMyOperations();
+        filterMyJobs();
         renderTasks();
         renderMachines();
-        renderTimeLog();
         renderProfile();
         if (isManager) {
             renderTeam();
@@ -158,15 +155,6 @@ function loadAllStaff() {
     });
 }
 
-function loadAllOperations() {
-    return apiGet('x_1964226_svem_com_operations', {
-        sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,job,sequence,work_center,description,op_status,preferred_machine,completed_by,assigned_to,started_date,completed_date,estimated_hours,actual_hours,process_name,notes',
-        sysparm_query: 'ORDERBYsequence',
-        sysparm_limit: '500'
-    }).then(function(ops) { allOperations = ops; });
-}
-
 function loadMachines() {
     return apiGet('x_1964226_svem_com_machines', {
         sysparm_display_value: 'all',
@@ -178,28 +166,30 @@ function loadMachines() {
 function loadJobs() {
     return apiGet('x_1964226_svem_com_jobs', {
         sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,job_number,po_number,customer,job_status,priority,percent_complete,customer_due_date,quantity_due',
-        sysparm_limit: '100'
+        sysparm_fields: 'sys_id,job_number,po_number,customer,job_status,priority,assigned_to,assigned_machine,customer_due_date,ship_by_date,quantity_due,notes,days_until_due',
+        sysparm_query: 'ORDERBYpriority',
+        sysparm_limit: '200'
     }).then(function(j) { allJobs = j; });
 }
 
-function filterMyOperations() {
-    if (!staffRecord) { myOperations = allOperations; return; }
+function filterMyJobs() {
+    if (!staffRecord) { myJobs = allJobs; return; }
     var mySysId = eid(staffRecord.sys_id);
     var myName = ev(staffRecord.name);
-    myOperations = [];
-    for (var i = 0; i < allOperations.length; i++) {
-        var assignedId = eid(allOperations[i].assigned_to);
-        var assignedName = ev(allOperations[i].assigned_to);
+    myJobs = [];
+    for (var i = 0; i < allJobs.length; i++) {
+        var assignedId = eid(allJobs[i].assigned_to);
+        var assignedName = ev(allJobs[i].assigned_to);
         if (assignedId === mySysId || assignedName === myName) {
-            myOperations.push(allOperations[i]);
+            myJobs.push(allJobs[i]);
         }
     }
-    // If no specific assignments, show all non-complete for employees
-    if (myOperations.length === 0 && !isManager) {
-        for (var j = 0; j < allOperations.length; j++) {
-            if (ev(allOperations[j].op_status) !== 'complete') {
-                myOperations.push(allOperations[j]);
+    // If no specific assignments and employee, show all active jobs
+    if (myJobs.length === 0 && !isManager) {
+        for (var j = 0; j < allJobs.length; j++) {
+            var st = ev(allJobs[j].job_status);
+            if (st !== 'complete' && st !== 'shipped') {
+                myJobs.push(allJobs[j]);
             }
         }
     }
@@ -210,23 +200,23 @@ function renderTasks() {
     var container = document.getElementById('myOperations');
     var activeArea = document.getElementById('activeTaskArea');
 
-    var activeOp = null;
-    for (var i = 0; i < myOperations.length; i++) {
-        if (ev(myOperations[i].op_status) === 'in_progress') { activeOp = myOperations[i]; break; }
+    var activeJob = null;
+    for (var i = 0; i < myJobs.length; i++) {
+        if (ev(myJobs[i].job_status) === 'in_progress') { activeJob = myJobs[i]; break; }
     }
 
-    if (activeOp) {
-        var jobName = ev(activeOp.job);
-        var wc = ev(activeOp.work_center) || ev(activeOp.process_name);
-        var opSysId = eid(activeOp.sys_id);
+    if (activeJob) {
+        var jobNum = ev(activeJob.job_number);
+        var pri = ev(activeJob.priority);
+        var jobSysId = eid(activeJob.sys_id);
         activeArea.innerHTML = '<div class="active-task">' +
             '<div class="active-task-label">&#9654; Currently Working On</div>' +
-            '<div class="active-task-job">' + escHtml(jobName) + '</div>' +
-            '<div class="active-task-op">Step ' + ev(activeOp.sequence) + ' &bull; ' + escHtml(wc).toUpperCase() + '</div>' +
+            '<div class="active-task-job">' + escHtml(jobNum) + '</div>' +
+            '<div class="active-task-op">' + escHtml(ev(activeJob.po_number)) + ' &bull; Priority: ' + escHtml(pri).toUpperCase() + ' &bull; Qty: ' + ev(activeJob.quantity_due) + '</div>' +
             '<div class="active-task-timer" id="taskTimer">00:00:00</div>' +
             '<div class="active-task-actions">' +
-                '<button class="action-btn warning" onclick="pauseOperation(\'' + opSysId + '\')">&#10074;&#10074; Pause</button>' +
-                '<button class="action-btn primary" onclick="submitForReview(\'' + opSysId + '\')">&#10148; Submit for Review</button>' +
+                '<button class="action-btn warning" onclick="pauseJob(\'' + jobSysId + '\')">&#10074;&#10074; Pause</button>' +
+                '<button class="action-btn primary" onclick="submitJobForReview(\'' + jobSysId + '\')">&#10148; Submit for Review</button>' +
             '</div>' +
         '</div>';
         startTimer();
@@ -235,60 +225,65 @@ function renderTasks() {
         stopTimer();
     }
 
-    // Group by status for staged view
-    var staged = { assigned: [], pending: [], pending_review: [] };
-    for (var j = 0; j < myOperations.length; j++) {
-        var st = ev(myOperations[j].op_status);
-        if (st === 'in_progress' || st === 'complete' || st === 'skipped') continue;
-        if (staged[st]) staged[st].push(myOperations[j]);
-        else staged.pending.push(myOperations[j]);
+    // Group by status
+    var staged = { assigned: [], pending_review: [], not_started: [] };
+    for (var j = 0; j < myJobs.length; j++) {
+        var st = ev(myJobs[j].job_status);
+        if (st === 'in_progress' || st === 'complete' || st === 'shipped') continue;
+        if (staged[st]) staged[st].push(myJobs[j]);
+        else staged.not_started.push(myJobs[j]);
     }
 
     var html = '';
 
-    // Pending review
     if (staged.pending_review.length > 0) {
         html += '<div class="stage-label review">&#9201; Pending Manager Review (' + staged.pending_review.length + ')</div>';
-        html += renderOpList(staged.pending_review, false);
+        html += renderJobList(staged.pending_review, false);
     }
 
-    // Assigned to me - ready to start
     if (staged.assigned.length > 0) {
         html += '<div class="stage-label assigned">&#128204; Assigned to You (' + staged.assigned.length + ')</div>';
-        html += renderOpList(staged.assigned, true);
+        html += renderJobList(staged.assigned, true);
     }
 
-    // Pending (unassigned)
-    if (staged.pending.length > 0) {
-        html += '<div class="stage-label queued">&#128203; Pending (' + staged.pending.length + ')</div>';
-        html += renderOpList(staged.pending, false);
+    if (staged.not_started.length > 0) {
+        html += '<div class="stage-label queued">&#128203; Not Started (' + staged.not_started.length + ')</div>';
+        html += renderJobList(staged.not_started, false);
     }
 
-    if (html === '' && !activeOp) {
-        html = '<div class="empty-state"><p>No pending operations.</p></div>';
+    if (html === '' && !activeJob) {
+        html = '<div class="empty-state"><p>No pending jobs.</p></div>';
     }
 
     container.innerHTML = html;
 }
 
-function renderOpList(ops, canStart) {
+function renderJobList(jobs, canStart) {
     var html = '';
-    for (var i = 0; i < ops.length; i++) {
-        var op = ops[i];
-        var status = ev(op.op_status) || 'queued';
-        var jn = ev(op.job);
-        var wcn = ev(op.work_center) || ev(op.process_name) || '--';
-        var estH = ev(op.estimated_hours);
-        var sid = eid(op.sys_id);
-        var assignee = ev(op.assigned_to);
+    for (var i = 0; i < jobs.length; i++) {
+        var job = jobs[i];
+        var status = ev(job.job_status) || 'not_started';
+        var jobNum = ev(job.job_number);
+        var poNum = ev(job.po_number);
+        var pri = ev(job.priority);
+        var qty = ev(job.quantity_due);
+        var dueDate = ev(job.customer_due_date);
+        var assignee = ev(job.assigned_to);
+        var sid = eid(job.sys_id);
 
-        html += '<div class="op-item" onclick="' + (canStart ? 'showOperationActions(\'' + sid + '\')' : 'openJobDetail2(\'' + sid + '\')') + '">' +
-            '<div class="op-seq">' + ev(op.sequence) + '</div>' +
+        var priClass = pri === 'critical' ? 'danger' : (pri === 'high' ? 'warning' : '');
+        html += '<div class="op-item" onclick="' + (canStart ? 'startJobConfirm(\'' + sid + '\')' : '') + '">' +
+            '<div class="op-seq' + (priClass ? ' ' + priClass : '') + '" style="' +
+                (pri === 'critical' ? 'background:rgba(239,68,68,0.2);color:#EF4444;' :
+                 pri === 'high' ? 'background:rgba(245,158,11,0.2);color:#F59E0B;' : '') + '">' +
+                escHtml(pri ? pri.charAt(0).toUpperCase() : '?') + '</div>' +
             '<div class="op-info">' +
-                '<div class="op-name">' + escHtml(wcn).toUpperCase() + '</div>' +
-                '<div class="op-meta"><span>' + escHtml(jn) + '</span>' +
-                (estH ? '<span>' + estH + 'h</span>' : '') +
-                (assignee ? '<span>&#128100; ' + escHtml(assignee) + '</span>' : '') +
+                '<div class="op-name">' + escHtml(jobNum) + '</div>' +
+                '<div class="op-meta">' +
+                    '<span>' + escHtml(poNum) + '</span>' +
+                    '<span>Qty: ' + qty + '</span>' +
+                    (dueDate ? '<span>Due: ' + escHtml(dueDate) + '</span>' : '') +
+                    (assignee ? '<span>&#128100; ' + escHtml(assignee) + '</span>' : '') +
                 '</div>' +
             '</div>' +
             '<span class="badge ' + status + '">' + status.replace(/_/g, ' ') + '</span>' +
@@ -374,31 +369,28 @@ function renderAssignments() {
     var picker = document.getElementById('staffPicker');
     if (!picker) return;
 
-    // Count unassigned
     var unassignedCount = 0;
-    for (var i = 0; i < allOperations.length; i++) {
-        var st = ev(allOperations[i].op_status);
-        if (st === 'pending' && !ev(allOperations[i].assigned_to)) unassignedCount++;
+    for (var i = 0; i < allJobs.length; i++) {
+        var st = ev(allJobs[i].job_status);
+        if (st === 'not_started' && !ev(allJobs[i].assigned_to)) unassignedCount++;
     }
     document.getElementById('unassignedCount').innerHTML = unassignedCount + ' unassigned';
 
-    // Render staff chips
     var html = '';
     for (var j = 0; j < allStaff.length; j++) {
         var s = allStaff[j];
         var sid = eid(s.sys_id);
         var name = ev(s.name);
         var status = ev(s.status);
-        var workCount = countStaffOps(sid);
+        var workCount = countStaffJobs(sid);
         html += '<div class="staff-chip' + (selectedAssignStaff === sid ? ' selected' : '') + '" id="chip_' + sid + '" onclick="selectStaffForAssign(\'' + sid + '\')">' +
             '<div class="chip-avatar">' + (name ? name.charAt(0).toUpperCase() : '?') + '</div>' +
             '<div><div class="chip-name">' + escHtml(name) + '</div>' +
-            '<div class="chip-meta">' + workCount + ' ops &bull; ' + status + '</div></div>' +
+            '<div class="chip-meta">' + workCount + ' jobs &bull; ' + status + '</div></div>' +
         '</div>';
     }
     picker.innerHTML = html;
 
-    // Auto-select first staff if none selected
     if (!selectedAssignStaff && allStaff.length > 0) {
         var first = allStaff[0];
         for (var k = 0; k < allStaff.length; k++) {
@@ -410,12 +402,12 @@ function renderAssignments() {
     }
 }
 
-function countStaffOps(staffSysId) {
+function countStaffJobs(staffSysId) {
     var count = 0;
-    for (var i = 0; i < allOperations.length; i++) {
-        var aId = eid(allOperations[i].assigned_to);
-        var st = ev(allOperations[i].op_status);
-        if (aId === staffSysId && st !== 'complete' && st !== 'skipped') count++;
+    for (var i = 0; i < allJobs.length; i++) {
+        var aId = eid(allJobs[i].assigned_to);
+        var st = ev(allJobs[i].job_status);
+        if (aId === staffSysId && st !== 'complete' && st !== 'shipped') count++;
     }
     return count;
 }
@@ -424,11 +416,7 @@ function selectStaffForAssign(sysId) {
     selectedAssignStaff = sysId;
     var chips = document.querySelectorAll('.staff-chip');
     for (var i = 0; i < chips.length; i++) {
-        if (chips[i].id === 'chip_' + sysId) {
-            chips[i].className = 'staff-chip selected';
-        } else {
-            chips[i].className = 'staff-chip';
-        }
+        chips[i].className = chips[i].id === 'chip_' + sysId ? 'staff-chip selected' : 'staff-chip';
     }
     renderAssignDashboard(sysId);
 }
@@ -437,51 +425,49 @@ function renderAssignDashboard(staffSysId) {
     var dashboard = document.getElementById('assignDashboard');
     if (!dashboard) return;
 
-    // Find staff name
     var staffName = '';
     for (var n = 0; n < allStaff.length; n++) {
         if (eid(allStaff[n].sys_id) === staffSysId) { staffName = ev(allStaff[n].name); break; }
     }
 
-    // Left: this staff's current work
-    var theirOps = [];
-    for (var i = 0; i < allOperations.length; i++) {
-        var aId = eid(allOperations[i].assigned_to);
-        var st = ev(allOperations[i].op_status);
-        if (aId === staffSysId && st !== 'complete' && st !== 'skipped') theirOps.push(allOperations[i]);
+    // Left: their assigned jobs
+    var theirJobs = [];
+    for (var i = 0; i < allJobs.length; i++) {
+        var aId = eid(allJobs[i].assigned_to);
+        var st = ev(allJobs[i].job_status);
+        if (aId === staffSysId && st !== 'complete' && st !== 'shipped') theirJobs.push(allJobs[i]);
     }
 
-    // Right: unassigned operations (pending, no assigned_to)
+    // Right: unassigned jobs
     var available = [];
-    for (var j = 0; j < allOperations.length; j++) {
-        var op = allOperations[j];
-        if (ev(op.op_status) === 'pending' && !ev(op.assigned_to)) available.push(op);
+    for (var j = 0; j < allJobs.length; j++) {
+        var jb = allJobs[j];
+        var jSt = ev(jb.job_status);
+        if ((jSt === 'not_started') && !ev(jb.assigned_to)) available.push(jb);
     }
 
-    var leftHtml = '<div class="assign-col-header">' + escHtml(staffName) + '\'s Work (' + theirOps.length + ')</div>';
-    if (theirOps.length === 0) {
+    var leftHtml = '<div class="assign-col-header">' + escHtml(staffName) + '\'s Jobs (' + theirJobs.length + ')</div>';
+    if (theirJobs.length === 0) {
         leftHtml += '<div class="empty-state"><p>No current assignments</p></div>';
     } else {
-        for (var k = 0; k < theirOps.length; k++) {
-            var o = theirOps[k];
-            var oSt = ev(o.op_status);
-            var oWc = ev(o.work_center) || ev(o.process_name) || '--';
+        for (var k = 0; k < theirJobs.length; k++) {
+            var o = theirJobs[k];
+            var oSt = ev(o.job_status);
             leftHtml += '<div class="op-item" style="cursor:default;">' +
-                '<div class="op-seq">' + ev(o.sequence) + '</div>' +
+                '<div class="op-seq">' + escHtml(ev(o.priority)).charAt(0).toUpperCase() + '</div>' +
                 '<div class="op-info">' +
-                    '<div class="op-name">' + escHtml(oWc).toUpperCase() + '</div>' +
-                    '<div class="op-meta"><span>' + escHtml(ev(o.job)) + '</span>' +
-                    (ev(o.estimated_hours) ? '<span>' + ev(o.estimated_hours) + 'h</span>' : '') + '</div>' +
+                    '<div class="op-name">' + escHtml(ev(o.job_number)) + '</div>' +
+                    '<div class="op-meta"><span>' + escHtml(ev(o.po_number)) + '</span><span>Qty: ' + ev(o.quantity_due) + '</span></div>' +
                 '</div>' +
                 '<span class="badge ' + oSt + '">' + oSt.replace(/_/g, ' ') + '</span>' +
             '</div>';
         }
     }
 
-    var rightHtml = '<div class="assign-col-header">Available Operations (' + available.length + ')</div>';
-    rightHtml += '<input type="text" class="assign-filter" id="opFilterInput" placeholder="Filter by job or work center..." oninput="filterAvailableOps()" />';
-    rightHtml += '<div id="availableOpsList">';
-    rightHtml += renderAvailableOps(available);
+    var rightHtml = '<div class="assign-col-header">Available Jobs (' + available.length + ')</div>';
+    rightHtml += '<input type="text" class="assign-filter" id="jobFilterInput" placeholder="Filter by job or PO number..." oninput="filterAvailableJobs()" />';
+    rightHtml += '<div id="availableJobsList">';
+    rightHtml += renderAvailableJobs(available);
     rightHtml += '</div>';
 
     dashboard.innerHTML = '<div class="assign-split">' +
@@ -490,56 +476,58 @@ function renderAssignDashboard(staffSysId) {
     '</div>';
 }
 
-function renderAvailableOps(ops) {
-    if (ops.length === 0) return '<div class="empty-state"><p>All operations assigned!</p></div>';
+function renderAvailableJobs(jobs) {
+    if (jobs.length === 0) return '<div class="empty-state"><p>All jobs assigned!</p></div>';
     var html = '';
-    for (var i = 0; i < ops.length; i++) {
-        var op = ops[i];
-        var wc = ev(op.work_center) || ev(op.process_name) || '--';
-        var jn = ev(op.job);
-        var est = ev(op.estimated_hours);
-        var sid = eid(op.sys_id);
+    for (var i = 0; i < jobs.length; i++) {
+        var jb = jobs[i];
+        var sid = eid(jb.sys_id);
+        var pri = ev(jb.priority);
         html += '<div class="op-item assign-available-op">' +
-            '<div class="op-seq">' + ev(op.sequence) + '</div>' +
+            '<div class="op-seq" style="' +
+                (pri === 'critical' ? 'background:rgba(239,68,68,0.2);color:#EF4444;' :
+                 pri === 'high' ? 'background:rgba(245,158,11,0.2);color:#F59E0B;' : '') + '">' +
+                escHtml(pri ? pri.charAt(0).toUpperCase() : '?') + '</div>' +
             '<div class="op-info">' +
-                '<div class="op-name">' + escHtml(wc).toUpperCase() + '</div>' +
-                '<div class="op-meta"><span>' + escHtml(jn) + '</span>' + (est ? '<span>' + est + 'h</span>' : '') + '</div>' +
+                '<div class="op-name">' + escHtml(ev(jb.job_number)) + '</div>' +
+                '<div class="op-meta"><span>' + escHtml(ev(jb.po_number)) + '</span><span>Qty: ' + ev(jb.quantity_due) + '</span>' +
+                (ev(jb.customer_due_date) ? '<span>Due: ' + escHtml(ev(jb.customer_due_date)) + '</span>' : '') + '</div>' +
             '</div>' +
-            '<button class="quick-assign-btn" onclick="quickAssign(\'' + sid + '\')">+ Assign</button>' +
+            '<button class="quick-assign-btn" onclick="quickAssignJob(\'' + sid + '\')">+ Assign</button>' +
         '</div>';
     }
     return html;
 }
 
-function filterAvailableOps() {
-    var input = document.getElementById('opFilterInput');
+function filterAvailableJobs() {
+    var input = document.getElementById('jobFilterInput');
     var filter = input ? input.value.toLowerCase() : '';
     var available = [];
-    for (var i = 0; i < allOperations.length; i++) {
-        var op = allOperations[i];
-        if (ev(op.op_status) !== 'pending' || ev(op.assigned_to)) continue;
+    for (var i = 0; i < allJobs.length; i++) {
+        var jb = allJobs[i];
+        if (ev(jb.job_status) !== 'not_started' || ev(jb.assigned_to)) continue;
         if (filter) {
-            var jn = ev(op.job).toLowerCase();
-            var wc = (ev(op.work_center) || ev(op.process_name) || '').toLowerCase();
-            if (jn.indexOf(filter) === -1 && wc.indexOf(filter) === -1) continue;
+            var jn = ev(jb.job_number).toLowerCase();
+            var po = ev(jb.po_number).toLowerCase();
+            if (jn.indexOf(filter) === -1 && po.indexOf(filter) === -1) continue;
         }
-        available.push(op);
+        available.push(jb);
     }
-    var list = document.getElementById('availableOpsList');
-    if (list) list.innerHTML = renderAvailableOps(available);
+    var list = document.getElementById('availableJobsList');
+    if (list) list.innerHTML = renderAvailableJobs(available);
 }
 
-function quickAssign(opSysId) {
+function quickAssignJob(jobSysId) {
     if (!selectedAssignStaff) { showToast('Select a staff member first', 'error'); return; }
     var staffName = '';
     for (var i = 0; i < allStaff.length; i++) {
         if (eid(allStaff[i].sys_id) === selectedAssignStaff) { staffName = ev(allStaff[i].name); break; }
     }
-    apiPatch('x_1964226_svem_com_operations', opSysId, {
+    apiPatch('x_1964226_svem_com_jobs', jobSysId, {
         assigned_to: selectedAssignStaff,
-        op_status: 'assigned'
+        job_status: 'assigned'
     }).then(function() {
-        showToast('Assigned to ' + staffName, 'success');
+        showToast('Job assigned to ' + staffName, 'success');
         return refreshAll();
     }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
@@ -549,16 +537,15 @@ function renderReview() {
     var container = document.getElementById('reviewList');
     if (!container) return;
 
-    // Find operations pending review
     var pending = [];
     var recentlyCompleted = [];
-    for (var i = 0; i < allOperations.length; i++) {
-        var op = allOperations[i];
-        var st = ev(op.op_status);
+    for (var i = 0; i < allJobs.length; i++) {
+        var jb = allJobs[i];
+        var st = ev(jb.job_status);
         if (st === 'pending_review') {
-            pending.push(op);
-        } else if (st === 'complete' && ev(op.completed_date)) {
-            recentlyCompleted.push(op);
+            pending.push(jb);
+        } else if (st === 'complete') {
+            recentlyCompleted.push(jb);
         }
     }
 
@@ -568,39 +555,35 @@ function renderReview() {
     if (pending.length > 0) {
         html += '<div class="stage-label review">&#9888; Needs Your Approval (' + pending.length + ')</div>';
         for (var j = 0; j < pending.length; j++) {
-            var op = pending[j];
-            var jn = ev(op.job);
-            var wc = ev(op.work_center) || ev(op.process_name);
-            var assignee = ev(op.assigned_to) || ev(op.completed_by);
-            var actual = ev(op.actual_hours);
-            var sid = eid(op.sys_id);
+            var jb = pending[j];
+            var assignee = ev(jb.assigned_to);
+            var sid = eid(jb.sys_id);
 
             html += '<div class="review-card">' +
                 '<div class="review-header">' +
                     '<div>' +
-                        '<div class="review-job">' + escHtml(jn) + ' &bull; ' + escHtml(wc).toUpperCase() + '</div>' +
-                        '<div class="review-meta">By: ' + escHtml(assignee) + (actual ? ' &bull; ' + actual + 'h logged' : '') + '</div>' +
+                        '<div class="review-job">' + escHtml(ev(jb.job_number)) + ' &bull; ' + escHtml(ev(jb.po_number)) + '</div>' +
+                        '<div class="review-meta">By: ' + escHtml(assignee) + ' &bull; Qty: ' + ev(jb.quantity_due) + '</div>' +
                     '</div>' +
-                    '<span class="badge pending_review">pending</span>' +
+                    '<span class="badge pending_review">pending review</span>' +
                 '</div>' +
                 '<div class="review-actions">' +
-                    '<button class="action-btn success" onclick="approveOperation(\'' + sid + '\')">&#10003; Approve</button>' +
-                    '<button class="action-btn danger" onclick="rejectOperation(\'' + sid + '\')">&#10007; Reject</button>' +
+                    '<button class="action-btn success" onclick="approveJob(\'' + sid + '\')">&#10003; Approve</button>' +
+                    '<button class="action-btn danger" onclick="rejectJob(\'' + sid + '\')">&#10007; Reject</button>' +
                 '</div>' +
             '</div>';
         }
     }
 
-    // Recently completed
     if (recentlyCompleted.length > 0) {
         html += '<div class="stage-label complete">&#10003; Recently Completed (' + Math.min(recentlyCompleted.length, 10) + ')</div>';
         for (var k = 0; k < Math.min(recentlyCompleted.length, 10); k++) {
             var oc = recentlyCompleted[k];
             html += '<div class="op-item" style="opacity:0.7;cursor:default;">' +
-                '<div class="op-seq" style="background:rgba(34,197,94,0.2);color:#22C55E;">' + ev(oc.sequence) + '</div>' +
+                '<div class="op-seq" style="background:rgba(34,197,94,0.2);color:#22C55E;">&#10003;</div>' +
                 '<div class="op-info">' +
-                    '<div class="op-name">' + escHtml(ev(oc.work_center) || ev(oc.process_name)).toUpperCase() + '</div>' +
-                    '<div class="op-meta"><span>' + escHtml(ev(oc.job)) + '</span><span>' + escHtml(ev(oc.completed_by)) + '</span></div>' +
+                    '<div class="op-name">' + escHtml(ev(oc.job_number)) + '</div>' +
+                    '<div class="op-meta"><span>' + escHtml(ev(oc.po_number)) + '</span><span>' + escHtml(ev(oc.assigned_to)) + '</span></div>' +
                 '</div>' +
                 '<span class="badge complete">complete</span>' +
             '</div>';
@@ -608,7 +591,7 @@ function renderReview() {
     }
 
     if (html === '') {
-        html = '<div class="empty-state"><p>No operations to review.</p></div>';
+        html = '<div class="empty-state"><p>No jobs to review.</p></div>';
     }
     container.innerHTML = html;
 }
@@ -647,48 +630,6 @@ function renderMachines() {
     container.innerHTML = html;
 }
 
-// ---- RENDER: TIME LOG ----
-function renderTimeLog() {
-    var select = document.getElementById('logOperation');
-    var opts = '<option value="">Select an operation...</option>';
-    var opsList = isManager ? allOperations : myOperations;
-    for (var i = 0; i < opsList.length; i++) {
-        var op = opsList[i];
-        if (ev(op.op_status) === 'complete') continue;
-        var wc = ev(op.work_center) || ev(op.process_name);
-        var jb = ev(op.job);
-        opts += '<option value="' + eid(op.sys_id) + '">' + escHtml(jb) + ' - ' + escHtml(wc) + '</option>';
-    }
-    select.innerHTML = opts;
-
-    var container = document.getElementById('timeEntries');
-    var opsWithHours = [];
-    for (var j = 0; j < opsList.length; j++) {
-        if (parseFloat(ev(opsList[j].actual_hours)) > 0) opsWithHours.push(opsList[j]);
-    }
-
-    if (opsWithHours.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No time entries yet.</p></div>';
-        return;
-    }
-
-    var html = '';
-    for (var k = 0; k < opsWithHours.length; k++) {
-        var o = opsWithHours[k];
-        html += '<div class="time-entry">' +
-            '<div class="time-entry-icon"><span style="font-size:18px;color:#3B82F6;">&#9201;</span></div>' +
-            '<div class="time-entry-info">' +
-                '<div class="time-entry-job">' + escHtml(ev(o.job)) + '</div>' +
-                '<div class="time-entry-detail">' + escHtml(ev(o.work_center) || ev(o.process_name)) +
-                (ev(o.completed_by) ? ' &bull; ' + escHtml(ev(o.completed_by)) : '') + '</div>' +
-            '</div>' +
-            '<div><div class="time-entry-hours">' + ev(o.actual_hours) + 'h</div>' +
-            '<div class="time-entry-date">' + (ev(o.started_date) ? ev(o.started_date).split(' ')[0] : '') + '</div></div>' +
-        '</div>';
-    }
-    container.innerHTML = html;
-}
-
 // ---- RENDER: PROFILE ----
 function renderProfile() {
     if (!staffRecord) return;
@@ -698,54 +639,49 @@ function renderProfile() {
     document.getElementById('profileStatus').innerHTML = '<span class="badge ' + ev(staffRecord.status) + '">' + ev(staffRecord.status) + '</span>';
     document.getElementById('profileMachine').innerHTML = ev(staffRecord.current_machine) || 'None';
 
-    document.getElementById('statJobsCompleted').innerHTML = ev(staffRecord.jobs_completed_this_week) || '0';
-    var totalHours = 0;
-    for (var i = 0; i < myOperations.length; i++) {
-        totalHours += parseFloat(ev(myOperations[i].actual_hours)) || 0;
+    var completedCount = 0;
+    for (var i = 0; i < myJobs.length; i++) {
+        if (ev(myJobs[i].job_status) === 'complete') completedCount++;
     }
-    document.getElementById('statHoursLogged').innerHTML = totalHours.toFixed(1);
+    document.getElementById('statJobsCompleted').innerHTML = completedCount;
+    document.getElementById('statHoursLogged').innerHTML = myJobs.length;
 }
 
 // ======= ACTIONS =======
 
-// -- Employee: start operation --
-function showOperationActions(sysId) {
-    var op = findOp(sysId);
-    if (!op) return;
-    var status = ev(op.op_status);
+// -- Employee: start job --
+function startJobConfirm(sysId) {
+    var job = findJob(sysId);
+    if (!job) return;
+    var status = ev(job.job_status);
     if (status === 'assigned') {
-        if (confirm('Start working on this operation?')) startOperation(sysId);
-    } else if (status === 'pending') {
-        showToast('This operation needs to be assigned first', 'error');
+        if (confirm('Start working on ' + ev(job.job_number) + '?')) startJob(sysId);
+    } else if (status === 'not_started') {
+        showToast('This job needs to be assigned first', 'error');
     }
 }
 
-function startOperation(sysId) {
-    var patchData = {
-        op_status: 'in_progress',
-        started_date: nowStr()
-    };
-    apiPatch('x_1964226_svem_com_operations', sysId, patchData)
-    .then(function() {
-        showToast('Operation started!', 'success');
+function startJob(sysId) {
+    apiPatch('x_1964226_svem_com_jobs', sysId, {
+        job_status: 'in_progress'
+    }).then(function() {
+        showToast('Job started!', 'success');
         return refreshAll();
     }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
-function pauseOperation(sysId) {
-    apiPatch('x_1964226_svem_com_operations', sysId, { op_status: 'assigned' })
+function pauseJob(sysId) {
+    apiPatch('x_1964226_svem_com_jobs', sysId, { job_status: 'assigned' })
     .then(function() {
-        showToast('Operation paused', 'success');
+        showToast('Job paused', 'success');
+        stopTimer();
         return refreshAll();
     }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
-function submitForReview(sysId) {
-    if (!confirm('Submit this operation for manager review?')) return;
-    var elapsed = timerElapsed / 3600;
-    var patchData = { op_status: 'pending_review' };
-    if (elapsed > 0.01) patchData.actual_hours = elapsed.toFixed(2);
-    apiPatch('x_1964226_svem_com_operations', sysId, patchData)
+function submitJobForReview(sysId) {
+    if (!confirm('Submit this job for manager review?')) return;
+    apiPatch('x_1964226_svem_com_jobs', sysId, { job_status: 'pending_review' })
     .then(function() {
         showToast('Submitted for review!', 'success');
         stopTimer();
@@ -753,30 +689,24 @@ function submitForReview(sysId) {
     }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
-// -- Manager: assign (legacy wrapper) --
-function assignOperation(opSysId) {
-    quickAssign(opSysId);
-}
-
 // -- Manager: approve/reject --
-function approveOperation(sysId) {
-    if (!confirm('Approve this operation as complete?')) return;
-    apiPatch('x_1964226_svem_com_operations', sysId, {
-        op_status: 'complete',
-        completed_date: nowStr()
+function approveJob(sysId) {
+    if (!confirm('Approve this job as complete?')) return;
+    apiPatch('x_1964226_svem_com_jobs', sysId, {
+        job_status: 'complete'
     }).then(function() {
-        showToast('Operation approved!', 'success');
+        showToast('Job approved!', 'success');
         return refreshAll();
     }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
-function rejectOperation(sysId) {
+function rejectJob(sysId) {
     var reason = prompt('Reason for rejection (optional):');
-    apiPatch('x_1964226_svem_com_operations', sysId, {
-        op_status: 'assigned',
+    apiPatch('x_1964226_svem_com_jobs', sysId, {
+        job_status: 'assigned',
         notes: reason ? 'REJECTED: ' + reason : 'REJECTED - Needs rework'
     }).then(function() {
-        showToast('Operation rejected and sent back', 'success');
+        showToast('Job rejected and sent back', 'success');
         return refreshAll();
     }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
@@ -865,64 +795,6 @@ function saveMachineStatus() {
     .catch(function(e) { showToast('Error: ' + e.message, 'error'); });
 }
 
-// -- Time log --
-function submitTimeLog() {
-    var opId = document.getElementById('logOperation').value;
-    var hours = parseFloat(document.getElementById('logHours').value);
-    var notes = document.getElementById('logNotes').value;
-    if (!opId) { showToast('Select an operation', 'error'); return; }
-    if (!hours || hours <= 0) { showToast('Enter valid hours', 'error'); return; }
-
-    var op = findOp(opId);
-    var existing = op ? (parseFloat(ev(op.actual_hours)) || 0) : 0;
-    var patchData = { actual_hours: (existing + hours).toFixed(2) };
-    if (notes) patchData.notes = notes;
-
-    apiPatch('x_1964226_svem_com_operations', opId, patchData)
-    .then(function() {
-        showToast(hours + 'h logged!', 'success');
-        document.getElementById('logHours').value = '';
-        document.getElementById('logNotes').value = '';
-        return refreshAll();
-    }).catch(function(e) { showToast('Error: ' + e.message, 'error'); });
-}
-
-// -- Job detail --
-function openJobDetail2(sysId) {
-    var op = findOp(sysId);
-    if (!op) return;
-    openJobDetail(op);
-}
-
-function openJobDetail(op) {
-    var jobRef = ev(op.job);
-    document.getElementById('modalJobNumber').innerHTML = escHtml(jobRef);
-    document.getElementById('modalJobInfo').innerHTML = '';
-
-    var jobOps = [];
-    for (var i = 0; i < allOperations.length; i++) {
-        if (ev(allOperations[i].job) === jobRef) jobOps.push(allOperations[i]);
-    }
-    jobOps.sort(function(a, b) { return parseInt(ev(a.sequence)) - parseInt(ev(b.sequence)); });
-
-    var html = '';
-    for (var j = 0; j < jobOps.length; j++) {
-        var o = jobOps[j];
-        var st = ev(o.op_status) || 'queued';
-        var wcn = ev(o.work_center) || ev(o.process_name) || '--';
-        html += '<div class="routing-step">' +
-            '<div class="routing-dot ' + st + '">' + ev(o.sequence) + '</div>' +
-            '<div class="routing-info">' +
-                '<div class="routing-wc">' + escHtml(wcn).toUpperCase() + '</div>' +
-                '<div class="routing-desc">' + escHtml(ev(o.description) || ev(o.completed_by) || 'Unassigned') + '</div>' +
-            '</div>' +
-            '<span class="badge ' + st + '">' + st.replace(/_/g, ' ') + '</span>' +
-        '</div>';
-    }
-    document.getElementById('modalRouting').innerHTML = html || '<div class="empty-state"><p>No routing steps</p></div>';
-    document.getElementById('jobDetailModal').className = 'modal-overlay active';
-}
-
 function openStaffDetail(sysId) {
     var s = null;
     for (var i = 0; i < allStaff.length; i++) {
@@ -934,12 +806,11 @@ function openStaffDetail(sysId) {
 
 // ======= HELPERS =======
 function refreshAll() {
-    return Promise.all([loadAllStaff(), loadAllOperations(), loadMachines(), loadJobs()])
+    return Promise.all([loadAllStaff(), loadMachines(), loadJobs()])
     .then(function() {
-        filterMyOperations();
+        filterMyJobs();
         renderTasks();
         renderMachines();
-        renderTimeLog();
         renderProfile();
         if (isManager) { renderTeam(); renderAssignments(); renderReview(); }
     });
@@ -968,9 +839,8 @@ function switchViewAs() {
         document.getElementById('userName').innerHTML = escHtml(n);
         document.getElementById('userAvatar').innerHTML = n ? n.charAt(0).toUpperCase() : '?';
     }
-    filterMyOperations();
+    filterMyJobs();
     renderTasks();
-    renderTimeLog();
     renderProfile();
 }
 
@@ -1087,9 +957,9 @@ function orgNode(staff, color) {
     '</div>';
 }
 
-function findOp(sysId) {
-    for (var i = 0; i < allOperations.length; i++) {
-        if (eid(allOperations[i].sys_id) === sysId) return allOperations[i];
+function findJob(sysId) {
+    for (var i = 0; i < allJobs.length; i++) {
+        if (eid(allJobs[i].sys_id) === sysId) return allJobs[i];
     }
     return null;
 }
@@ -1181,7 +1051,7 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
 .badge.running { background:rgba(34,197,94,0.15); color:var(--success); }
 .badge.idle { background:rgba(139,141,151,0.15); color:var(--text-secondary); }
 .badge.maintenance { background:rgba(239,68,68,0.15); color:var(--danger); }
-.badge.queued,.badge.pending { background:rgba(245,158,11,0.15); color:var(--warning); }
+.badge.queued,.badge.pending,.badge.not_started { background:rgba(245,158,11,0.15); color:var(--warning); }
 .badge.in_progress { background:rgba(59,130,246,0.15); color:var(--accent); }
 .badge.complete { background:rgba(34,197,94,0.15); color:var(--success); }
 .badge.on_hold { background:rgba(239,68,68,0.15); color:var(--danger); }
@@ -1421,34 +1291,12 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
         <div id="machineList"><div class="loading"><div class="spinner"></div>Loading...</div></div>
     </div>
 
-    <!-- TIME LOG -->
-    <div class="tab-content" id="tab-time">
-        <div class="section-header">Log Hours</div>
-        <div class="log-form">
-            <div class="form-group">
-                <label class="form-label">Operation</label>
-                <select class="form-select" id="logOperation"><option value="">Select...</option></select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Hours</label>
-                <input type="number" class="form-input" id="logHours" placeholder="2.5" step="0.25" min="0" max="24" />
-            </div>
-            <div class="form-group">
-                <label class="form-label">Notes</label>
-                <input type="text" class="form-input" id="logNotes" placeholder="Optional notes..." />
-            </div>
-            <button class="action-btn primary full" onclick="submitTimeLog()">Log Hours</button>
-        </div>
-        <div class="section-header">Recent Entries</div>
-        <div id="timeEntries"><div class="loading"><div class="spinner"></div></div></div>
-    </div>
-
     <!-- PROFILE -->
     <div class="tab-content" id="tab-profile">
         <div class="section-header">This Week</div>
         <div class="stats-grid">
             <div class="stat-card"><div class="stat-value accent" id="statJobsCompleted">-</div><div class="stat-label">Jobs Done</div></div>
-            <div class="stat-card"><div class="stat-value success" id="statHoursLogged">-</div><div class="stat-label">Hours Logged</div></div>
+            <div class="stat-card"><div class="stat-value success" id="statHoursLogged">-</div><div class="stat-label">Active Jobs</div></div>
         </div>
         <div class="section-header">My Info</div>
         <div class="profile-section">
@@ -1495,17 +1343,6 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
 </div>
 
 <!-- MODALS -->
-<div class="modal-overlay" id="jobDetailModal" onclick="closeModal('jobDetailModal')">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
-        <div class="modal-handle"></div>
-        <div class="modal-title" id="modalJobNumber"></div>
-        <div class="modal-subtitle" id="modalJobInfo"></div>
-        <div class="section-header">Job Routing</div>
-        <div id="modalRouting"></div>
-        <button class="action-btn secondary full" onclick="closeModal('jobDetailModal')" style="margin-top:14px;">Close</button>
-    </div>
-</div>
-
 <div class="modal-overlay" id="machineModal" onclick="closeModal('machineModal')">
     <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-handle"></div>
