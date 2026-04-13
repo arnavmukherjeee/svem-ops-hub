@@ -27,7 +27,7 @@ var selectedMachineStatus = null;
 var clockedIn = false;
 
 // ---- INIT ----
-addLoadEvent(function() { portalInit(); });
+window.onload = function() { portalInit(); };
 
 function portalInit() {
     loadCurrentUser().then(function() {
@@ -81,8 +81,7 @@ function extractSysId(field) {
 
 // ---- LOAD DATA ----
 function loadCurrentUser() {
-    var userName = 'admin';
-    try { if (window.NOW && window.NOW.user) userName = window.NOW.user.name; } catch(e) {}
+    var userName = window._svemUserName || 'admin';
 
     return apiGet('sys_user', {
         sysparm_query: 'user_name=' + userName,
@@ -105,10 +104,10 @@ function loadCurrentUser() {
         if (!staffRecord && staff.length > 0) staffRecord = staff[0];
 
         var name = staffRecord ? extractVal(staffRecord.name) : uName;
-        gel('userName').innerHTML = escHtml(name || 'Employee');
-        gel('userAvatar').innerHTML = name ? name.charAt(0).toUpperCase() : '?';
+        document.getElementById('userName').innerHTML = escHtml(name || 'Employee');
+        document.getElementById('userAvatar').innerHTML = name ? name.charAt(0).toUpperCase() : '?';
         var role = staffRecord ? extractVal(staffRecord.role) : '';
-        gel('userRole').innerHTML = role ? formatRole(role) + ' &bull; SVEM' : 'SVEM Employee Portal';
+        document.getElementById('userRole').innerHTML = role ? formatRole(role) + ' &bull; SVEM' : 'SVEM Employee Portal';
 
         if (staffRecord) {
             var status = extractVal(staffRecord.status);
@@ -145,8 +144,8 @@ function loadJobs() {
 
 // ---- RENDER: TASKS ----
 function renderTasks() {
-    var container = gel('myOperations');
-    var activeArea = gel('activeTaskArea');
+    var container = document.getElementById('myOperations');
+    var activeArea = document.getElementById('activeTaskArea');
 
     var activeOp = null;
     for (var i = 0; i < myOperations.length; i++) {
@@ -206,12 +205,12 @@ function renderTasks() {
 
 // ---- RENDER: MACHINES ----
 function renderMachines() {
-    var container = gel('machineList');
+    var container = document.getElementById('machineList');
     var runCount = 0;
     for (var i = 0; i < allMachines.length; i++) {
         if (extractVal(allMachines[i].status) === 'running') runCount++;
     }
-    gel('machineCount').innerHTML = runCount + '/' + allMachines.length + ' running';
+    document.getElementById('machineCount').innerHTML = runCount + '/' + allMachines.length + ' running';
 
     if (allMachines.length === 0) {
         container.innerHTML = '<div class="empty-state"><p>No machines found</p></div>';
@@ -240,7 +239,7 @@ function renderMachines() {
 
 // ---- RENDER: TIME LOG ----
 function renderTimeLog() {
-    var select = gel('logOperation');
+    var select = document.getElementById('logOperation');
     var opts = '<option value="">Select an operation...</option>';
     for (var i = 0; i < myOperations.length; i++) {
         var op = myOperations[i];
@@ -250,7 +249,7 @@ function renderTimeLog() {
     }
     select.innerHTML = opts;
 
-    var container = gel('timeEntries');
+    var container = document.getElementById('timeEntries');
     var opsWithHours = [];
     for (var j = 0; j < myOperations.length; j++) {
         if (parseFloat(extractVal(myOperations[j].actual_hours)) > 0) opsWithHours.push(myOperations[j]);
@@ -286,24 +285,24 @@ function renderTimeLog() {
 function renderProfile() {
     if (!staffRecord) return;
 
-    gel('profileEmpId').innerHTML = extractVal(staffRecord.employee_id) || '--';
-    gel('profileRole').innerHTML = formatRole(extractVal(staffRecord.role));
-    gel('profileShift').innerHTML = (extractVal(staffRecord.shift) || '--').toUpperCase();
-    gel('profileStatus').innerHTML = '<span class="badge ' + extractVal(staffRecord.status) + '">' + extractVal(staffRecord.status) + '</span>';
-    gel('profileMachine').innerHTML = extractVal(staffRecord.current_machine) || 'None';
+    document.getElementById('profileEmpId').innerHTML = extractVal(staffRecord.employee_id) || '--';
+    document.getElementById('profileRole').innerHTML = formatRole(extractVal(staffRecord.role));
+    document.getElementById('profileShift').innerHTML = (extractVal(staffRecord.shift) || '--').toUpperCase();
+    document.getElementById('profileStatus').innerHTML = '<span class="badge ' + extractVal(staffRecord.status) + '">' + extractVal(staffRecord.status) + '</span>';
+    document.getElementById('profileMachine').innerHTML = extractVal(staffRecord.current_machine) || 'None';
 
-    gel('statJobsCompleted').innerHTML = extractVal(staffRecord.jobs_completed_this_week) || '0';
+    document.getElementById('statJobsCompleted').innerHTML = extractVal(staffRecord.jobs_completed_this_week) || '0';
     var totalHours = 0;
     for (var i = 0; i < myOperations.length; i++) {
         totalHours += parseFloat(extractVal(myOperations[i].actual_hours)) || 0;
     }
-    gel('statHoursLogged').innerHTML = totalHours.toFixed(1);
+    document.getElementById('statHoursLogged').innerHTML = totalHours.toFixed(1);
     var completedOps = 0;
     for (var j = 0; j < myOperations.length; j++) {
         if (extractVal(myOperations[j].op_status) === 'complete') completedOps++;
     }
-    gel('statOpsCompleted').innerHTML = completedOps;
-    gel('statCurrentStreak').innerHTML = Math.min(parseInt(extractVal(staffRecord.jobs_completed_this_week)) || 0, 5);
+    document.getElementById('statOpsCompleted').innerHTML = completedOps;
+    document.getElementById('statCurrentStreak').innerHTML = Math.min(parseInt(extractVal(staffRecord.jobs_completed_this_week)) || 0, 5);
 }
 
 // ---- ACTIONS ----
@@ -376,9 +375,9 @@ function completeOperation(sysId) {
 }
 
 function submitTimeLog() {
-    var opId = gel('logOperation').value;
-    var hours = parseFloat(gel('logHours').value);
-    var notes = gel('logNotes').value;
+    var opId = document.getElementById('logOperation').value;
+    var hours = parseFloat(document.getElementById('logHours').value);
+    var notes = document.getElementById('logNotes').value;
 
     if (!opId) { showToast('Please select an operation', 'error'); return; }
     if (!hours || hours <= 0) { showToast('Please enter valid hours', 'error'); return; }
@@ -394,8 +393,8 @@ function submitTimeLog() {
     apiPatch('x_1964226_svem_com_operations', opId, patchData)
     .then(function() {
         showToast(hours + ' hours logged!', 'success');
-        gel('logHours').value = '';
-        gel('logNotes').value = '';
+        document.getElementById('logHours').value = '';
+        document.getElementById('logNotes').value = '';
         return loadMyOperations();
     }).then(function() {
         renderTimeLog();
@@ -422,7 +421,7 @@ function toggleClock() {
 }
 
 function updateClockBtn() {
-    var btn = gel('clockBtn');
+    var btn = document.getElementById('clockBtn');
     if (clockedIn) {
         btn.innerHTML = 'Clock Out';
         btn.className = 'clock-btn clock-out';
@@ -443,13 +442,13 @@ function openMachineModal(sysId) {
     selectedMachineSysId = sysId;
     selectedMachineStatus = extractVal(machine.status);
 
-    gel('machineModalName').innerHTML = escHtml(extractVal(machine.machine_name));
-    gel('machineModalInfo').innerHTML = escHtml(extractVal(machine.machine_number)) + ' &bull; ' + escHtml(extractVal(machine.machine_type));
+    document.getElementById('machineModalName').innerHTML = escHtml(extractVal(machine.machine_name));
+    document.getElementById('machineModalInfo').innerHTML = escHtml(extractVal(machine.machine_number)) + ' &bull; ' + escHtml(extractVal(machine.machine_type));
 
     var opts = document.querySelectorAll('.status-option');
     for (var j = 0; j < opts.length; j++) { opts[j].className = 'status-option'; }
 
-    gel('machineModal').className = 'modal-overlay active';
+    document.getElementById('machineModal').className = 'modal-overlay active';
 }
 
 function selectMachineStatus(status, el) {
@@ -476,8 +475,8 @@ function saveMachineStatus() {
 // ---- JOB DETAIL ----
 function openJobDetail(op) {
     var jobRef = extractVal(op.job);
-    gel('modalJobNumber').innerHTML = escHtml(jobRef);
-    gel('modalJobInfo').innerHTML = escHtml(extractVal(op.work_center) || '');
+    document.getElementById('modalJobNumber').innerHTML = escHtml(jobRef);
+    document.getElementById('modalJobInfo').innerHTML = escHtml(extractVal(op.work_center) || '');
 
     var jobOps = [];
     for (var i = 0; i < myOperations.length; i++) {
@@ -503,8 +502,8 @@ function openJobDetail(op) {
             '<span class="badge ' + st + '">' + st.replace('_', ' ') + '</span>' +
         '</div>';
     }
-    gel('modalRouting').innerHTML = html || '<div class="empty-state"><p>No routing steps found</p></div>';
-    gel('jobDetailModal').className = 'modal-overlay active';
+    document.getElementById('modalRouting').innerHTML = html || '<div class="empty-state"><p>No routing steps found</p></div>';
+    document.getElementById('jobDetailModal').className = 'modal-overlay active';
 }
 
 // ---- TIMER ----
@@ -517,7 +516,7 @@ function startTimer() {
         var h = Math.floor(timerElapsed / 3600);
         var m = Math.floor((timerElapsed % 3600) / 60);
         var s = Math.floor(timerElapsed % 60);
-        var el = gel('taskTimer');
+        var el = document.getElementById('taskTimer');
         if (el) el.innerHTML = pad(h) + ':' + pad(m) + ':' + pad(s);
     }, 1000);
 }
@@ -535,14 +534,14 @@ function switchTab(tabName, btn) {
     for (var i = 0; i < tabs.length; i++) tabs[i].className = 'tab-content';
     var btns = document.querySelectorAll('.tab-btn');
     for (var j = 0; j < btns.length; j++) btns[j].className = 'tab-btn';
-    gel('tab-' + tabName).className = 'tab-content active';
+    document.getElementById('tab-' + tabName).className = 'tab-content active';
     btn.className = 'tab-btn active';
 }
 
-function closeModal(id) { gel(id).className = 'modal-overlay'; }
+function closeModal(id) { document.getElementById(id).className = 'modal-overlay'; }
 
 function showToast(msg, type) {
-    var toast = gel('toast');
+    var toast = document.getElementById('toast');
     toast.innerHTML = escHtml(msg);
     toast.className = 'toast ' + (type || '') + ' show';
     setTimeout(function() { toast.className = 'toast'; }, 2500);
@@ -570,6 +569,8 @@ function escHtml(s) {
         <html><![CDATA[<html>
 <head>
     <title>SVEM Employee Portal</title>
+    <script>window._svemUserName = "$[gs.getUserName()]";</script>
+    <script>window.g_ck = "$[gs.getSession().getSessionToken() || gs.getSessionToken()]";</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
