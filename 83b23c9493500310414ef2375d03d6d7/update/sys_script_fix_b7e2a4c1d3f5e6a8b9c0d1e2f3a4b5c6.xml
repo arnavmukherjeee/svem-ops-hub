@@ -1,10 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script_fix">
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
-        <before/>
+        <before>false</before>
         <description>Creates translated field labels (column_label) for all SVEM Command dictionary fields in Spanish, Chinese, Vietnamese, and Tagalog. Queries actual sys_dictionary sys_ids on the instance to set correct documentkey values.</description>
         <name>SVEM - Create Field Label Translations</name>
         <record_for_rollback>false</record_for_rollback>
-        <record_type>fix_script</record_type>
         <script><![CDATA[// SVEM Command - Field Label Translation Fix Script
 // Creates sys_translated_text records for all custom dictionary fields
 // using actual sys_dictionary sys_ids as documentkeys
@@ -151,8 +150,6 @@ gs.info('SVEM Translation Fix Script Complete: ' + created + ' created, ' + upda
         <sys_class_name>sys_script_fix</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-12 23:30:00</sys_created_on>
-        <sys_domain>global</sys_domain>
-        <sys_domain_path>/</sys_domain_path>
         <sys_id>b7e2a4c1d3f5e6a8b9c0d1e2f3a4b5c6</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_name>SVEM - Create Field Label Translations</sys_name>

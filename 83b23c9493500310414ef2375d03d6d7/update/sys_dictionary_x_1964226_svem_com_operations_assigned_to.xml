@@ -35,7 +35,7 @@
         <primary>false</primary>
         <read_only>false</read_only>
         <read_roles/>
-        <reference display_value="Staff" name="x_1964226_svem_com_staff">x_1964226_svem_com_staff</reference>
+        <reference display_value="" name="x_1964226_svem_com_staff">x_1964226_svem_com_staff</reference>
         <reference_cascade_rule/>
         <reference_floats>false</reference_floats>
         <reference_key/>
@@ -47,6 +47,7 @@
         <sys_class_name>sys_dictionary</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-13 06:00:00</sys_created_on>
+        <sys_id>25eca1e49390c310414ef2375d03d692</sys_id>
         <sys_name>Assigned To</sys_name>
         <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
         <sys_policy/>
