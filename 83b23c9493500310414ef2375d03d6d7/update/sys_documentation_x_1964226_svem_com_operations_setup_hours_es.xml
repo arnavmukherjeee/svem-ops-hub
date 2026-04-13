@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="setup_hours" label="Horas de Preparación" language="es" table="x_1964226_svem_com_operations">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>setup_hours</element>
+            <help/>
+            <hint/>
+            <label>Horas de Preparación</label>
+            <language>es</language>
+            <name>x_1964226_svem_com_operations</name>
+            <plural/>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2026-04-13 10:00:00</sys_created_on>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Horas de Preparación</sys_name>
+            <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+            <sys_update_name>sys_documentation_x_1964226_svem_com_operations_setup_hours_es</sys_update_name>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2026-04-13 10:00:00</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>
