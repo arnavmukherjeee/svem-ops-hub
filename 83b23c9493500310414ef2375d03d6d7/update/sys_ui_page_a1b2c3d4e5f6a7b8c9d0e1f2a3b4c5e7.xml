@@ -122,7 +122,7 @@ function eid(field) {
 function loadAllStaff() {
     return apiGet('x_1964226_svem_com_staff', {
         sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,name,employee_id,role,shift,status,current_job,current_machine,current_operation,jobs_completed_this_week,notes',
+        sysparm_fields: 'sys_id,name,employee_id,role,shift,status,current_job,current_machine,jobs_completed_this_week,notes',
         sysparm_limit: '200'
     }).then(function(staff) {
         allStaff = staff;
@@ -152,7 +152,7 @@ function loadAllStaff() {
 function loadMachines() {
     return apiGet('x_1964226_svem_com_machines', {
         sysparm_display_value: 'all',
-        sysparm_fields: 'sys_id,machine_name,machine_number,machine_type,status,current_job,current_operation,uptime_percentage',
+        sysparm_fields: 'sys_id,machine_name,machine_number,machine_type,status,current_job,uptime_percentage',
         sysparm_limit: '50'
     }).then(function(m) { allMachines = m; });
 }

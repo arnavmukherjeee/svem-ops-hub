@@ -37,7 +37,7 @@
         <element function_definition="glidefunction:percent_complete_operations" function_field="true" label="Percent Complete" max_length="20" name="percent_complete" read_only="true" type="decimal"/>
         <element attributes="edge_encryption_enabled=true" label="Ship By Date" mandatory="true" max_length="40" name="ship_by_date" type="glide_date"/>
         <element attributes="edge_encryption_enabled=true" label="Need By Date" max_length="40" name="need_by_date" type="glide_date"/>
-        <element attributes="encode_utf8=false" label="Current Operation" max_length="32" name="current_operation" reference="x_1964226_svem_com_operations" type="reference"/>
+
         <element attributes="encode_utf8=false" label="Customer" max_length="32" name="customer" reference="sys_user" type="reference"/>
         <element attributes="edge_encryption_enabled=true" label="Release Number" max_length="10" name="release_number" type="string"/>
         <element choice="1" default="mto" label="Job Type" max_length="40" name="job_type" type="choice">
@@ -54,9 +54,7 @@
         <index name="index5">
             <element name="assigned_to"/>
         </index>
-        <index name="index2">
-            <element name="current_operation"/>
-        </index>
+
         <index name="index3">
             <element name="customer"/>
         </index>

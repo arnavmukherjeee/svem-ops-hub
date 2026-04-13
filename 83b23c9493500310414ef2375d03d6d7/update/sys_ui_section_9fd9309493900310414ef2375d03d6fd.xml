@@ -57,22 +57,8 @@
             <type/>
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
-            <element>current_operation</element>
-            <position>4</position>
-            <sys_created_by>admin</sys_created_by>
-            <sys_created_on>2026-04-12 22:19:17</sys_created_on>
-            <sys_id>17d9b09493900310414ef2375d03d60f</sys_id>
-            <sys_mod_count>0</sys_mod_count>
-            <sys_ui_formatter/>
-            <sys_ui_section caption="NULL" display_value="" name="x_1964226_svem_com_machines" sys_domain="global" view="Default view">9fd9309493900310414ef2375d03d6fd</sys_ui_section>
-            <sys_updated_by>admin</sys_updated_by>
-            <sys_updated_on>2026-04-12 22:19:17</sys_updated_on>
-            <sys_user/>
-            <type/>
-        </sys_ui_element>
-        <sys_ui_element action="INSERT_OR_UPDATE">
             <element>.split</element>
-            <position>5</position>
+            <position>4</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>dfd9b09493900310414ef2375d03d60f</sys_id>
@@ -86,7 +72,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>machine_type</element>
-            <position>6</position>
+            <position>5</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>9bd9b09493900310414ef2375d03d610</sys_id>
@@ -100,7 +86,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>.end_split</element>
-            <position>7</position>
+            <position>6</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>57d9b09493900310414ef2375d03d611</sys_id>
@@ -114,7 +100,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>notes</element>
-            <position>8</position>
+            <position>7</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>9fd9b09493900310414ef2375d03d62a</sys_id>
@@ -128,7 +114,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>.begin_split</element>
-            <position>9</position>
+            <position>8</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>5bd9b09493900310414ef2375d03d62b</sys_id>
@@ -142,7 +128,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>status</element>
-            <position>10</position>
+            <position>9</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>17d9b09493900310414ef2375d03d62c</sys_id>
@@ -156,7 +142,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>total_jobs_queued</element>
-            <position>11</position>
+            <position>10</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>dfd9b09493900310414ef2375d03d62c</sys_id>
@@ -170,7 +156,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>.split</element>
-            <position>12</position>
+            <position>11</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>9bd9b09493900310414ef2375d03d62d</sys_id>
@@ -184,7 +170,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>next_available</element>
-            <position>13</position>
+            <position>12</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>57d9b09493900310414ef2375d03d62e</sys_id>
@@ -198,7 +184,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>uptime_percentage</element>
-            <position>14</position>
+            <position>13</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>13d9b09493900310414ef2375d03d62f</sys_id>
@@ -212,7 +198,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>.end_split</element>
-            <position>15</position>
+            <position>14</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:19:17</sys_created_on>
             <sys_id>dbd9b09493900310414ef2375d03d62f</sys_id>

@@ -239,22 +239,8 @@
             <type/>
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
-            <element>current_operation</element>
-            <position>17</position>
-            <sys_created_by>admin</sys_created_by>
-            <sys_created_on>2026-04-12 22:06:14</sys_created_on>
-            <sys_id>88e6bcdc93500310414ef2375d03d696</sys_id>
-            <sys_mod_count>0</sys_mod_count>
-            <sys_ui_formatter/>
-            <sys_ui_section caption="NULL" display_value="" name="x_1964226_svem_com_jobs" sys_domain="global" view="Default view">ffd67cdc93500310414ef2375d03d6df</sys_ui_section>
-            <sys_updated_by>admin</sys_updated_by>
-            <sys_updated_on>2026-04-12 22:06:14</sys_updated_on>
-            <sys_user/>
-            <type/>
-        </sys_ui_element>
-        <sys_ui_element action="INSERT_OR_UPDATE">
             <element>customer</element>
-            <position>18</position>
+            <position>17</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:06:14</sys_created_on>
             <sys_id>44e6bcdc93500310414ef2375d03d697</sys_id>
@@ -268,7 +254,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>release_number</element>
-            <position>19</position>
+            <position>18</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:06:14</sys_created_on>
             <sys_id>00e6bcdc93500310414ef2375d03d698</sys_id>
@@ -282,7 +268,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>job_type</element>
-            <position>20</position>
+            <position>19</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:06:14</sys_created_on>
             <sys_id>c8e6bcdc93500310414ef2375d03d698</sys_id>
@@ -296,7 +282,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>assigned_machine</element>
-            <position>21</position>
+            <position>20</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:06:14</sys_created_on>
             <sys_id>84e6bcdc93500310414ef2375d03d699</sys_id>
@@ -310,7 +296,7 @@
         </sys_ui_element>
         <sys_ui_element action="INSERT_OR_UPDATE">
             <element>.end_split</element>
-            <position>22</position>
+            <position>21</position>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 22:06:14</sys_created_on>
             <sys_id>40e6bcdc93500310414ef2375d03d69a</sys_id>

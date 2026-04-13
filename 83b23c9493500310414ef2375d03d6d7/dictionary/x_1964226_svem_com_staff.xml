@@ -29,13 +29,11 @@
         </element>
         <element attributes="edge_encryption_enabled=true" label="Notes" max_length="4000" name="notes" type="string"/>
         <element attributes="encode_utf8=false" label="Current Machine" max_length="32" name="current_machine" reference="x_1964226_svem_com_machines" type="reference"/>
-        <element attributes="encode_utf8=false" label="Current Operation" max_length="32" name="current_operation" reference="x_1964226_svem_com_operations" type="reference"/>
+
         <element function_definition="glidefunction:count_completed_jobs_this_week" function_field="true" label="Jobs This Week" max_length="40" name="jobs_completed_this_week" read_only="true" type="integer"/>
         <element attributes="edge_encryption_enabled=true" label="Employee ID" max_length="20" name="employee_id" read_only="true" type="string"/>
         <element attributes="edge_encryption_enabled=true" display="true" label="Name" mandatory="true" max_length="100" name="name" type="string"/>
-        <index name="index">
-            <element name="current_operation"/>
-        </index>
+
         <index name="index2">
             <element name="current_job"/>
         </index>
