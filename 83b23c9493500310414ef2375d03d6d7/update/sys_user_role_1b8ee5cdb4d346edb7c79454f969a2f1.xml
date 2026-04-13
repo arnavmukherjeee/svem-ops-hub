@@ -4,7 +4,7 @@
         <can_delegate>true</can_delegate>
         <description>Shipping role with access to deliveries and shipping status updates</description>
         <elevated_privilege>false</elevated_privilege>
-        <federated_id/>
+        <federated_id>2KH5pkuj1r0/tWlWqIjKm8NMe6u3n+gtgRqQwdnJVbs=</federated_id>
         <grantable>true</grantable>
         <includes_roles/>
         <name>x_1964226_svem_com.shipping</name>
