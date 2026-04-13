@@ -1,10 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script_fix">
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
-        <before/>
+        <before>false</before>
         <description>Creates sys_documentation records to translate all SVEM Command field labels into Spanish, Chinese, Vietnamese, and Tagalog. Run from Global scope.</description>
-        <name>SVEM - Field Label Translations (sys_documentation)</name>
+        <name>SVEM - Field Label Translations (sys_doc</name>
         <record_for_rollback>false</record_for_rollback>
-        <record_type>fix_script</record_type>
         <script><![CDATA[// SVEM Command - Field Label Translations via sys_documentation
 // This is the CORRECT approach for translating field labels in ServiceNow.
 // Must be run from GLOBAL scope (not app scope).
@@ -143,8 +142,6 @@ gs.info('Total fields: ' + (created + updated) + ' across ' + langs.length + ' l
         <sys_class_name>sys_script_fix</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-13 06:00:00</sys_created_on>
-        <sys_domain>global</sys_domain>
-        <sys_domain_path>/</sys_domain_path>
         <sys_id>b7e2a4c1d3f5e6a8b9c0d1e2f3a4b5c6</sys_id>
         <sys_mod_count>2</sys_mod_count>
         <sys_name>SVEM - Field Label Translations (sys_documentation)</sys_name>
@@ -154,5 +151,6 @@ gs.info('Total fields: ' + (created + updated) + ' across ' + langs.length + ' l
         <sys_update_name>sys_script_fix_b7e2a4c1d3f5e6a8b9c0d1e2f3a4b5c6</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2026-04-13 10:00:00</sys_updated_on>
+        <unloadable>false</unloadable>
     </sys_script_fix>
 </record_update>
