@@ -30,6 +30,8 @@ var selectedMachineSysId = null;
 var selectedMachineStatus = null;
 var clockedIn = false;
 
+var viewAsStaffId = null; // Manager "View As" override
+
 // ---- INIT ----
 window.onload = function() {
     setupRoleUI();
@@ -46,7 +48,7 @@ function setupRoleUI() {
     // Update tab grid columns
     var bottomTabs = document.getElementById('bottomTabs');
     if (isManager) {
-        bottomTabs.style.gridTemplateColumns = 'repeat(6, 1fr)';
+        bottomTabs.style.gridTemplateColumns = 'repeat(7, 1fr)';
     } else {
         bottomTabs.style.gridTemplateColumns = 'repeat(4, 1fr)';
     }
@@ -307,6 +309,19 @@ function renderOpList(ops, canStart) {
 function renderTeam() {
     var container = document.getElementById('teamList');
     if (!container) return;
+
+    // Populate View As dropdown
+    var viewAs = document.getElementById('viewAsSelect');
+    if (viewAs && viewAs.options.length <= 1) {
+        var vopts = '<option value="">View as yourself</option>';
+        for (var v = 0; v < allStaff.length; v++) {
+            vopts += '<option value="' + eid(allStaff[v].sys_id) + '">' + escHtml(ev(allStaff[v].name)) + ' (' + formatRole(ev(allStaff[v].role)) + ')</option>';
+        }
+        viewAs.innerHTML = vopts;
+    }
+
+    // Render org chart
+    renderOrgChart();
 
     var activeCount = 0;
     for (var i = 0; i < allStaff.length; i++) {
@@ -835,6 +850,148 @@ function refreshAll() {
     });
 }
 
+// ---- VIEW AS (Manager) ----
+function switchViewAs() {
+    var sel = document.getElementById('viewAsSelect');
+    viewAsStaffId = sel ? sel.value : '';
+    if (viewAsStaffId) {
+        // Switch context to selected staff member
+        for (var i = 0; i < allStaff.length; i++) {
+            if (eid(allStaff[i].sys_id) === viewAsStaffId) { staffRecord = allStaff[i]; break; }
+        }
+        var name = ev(staffRecord.name);
+        document.getElementById('userName').innerHTML = escHtml(name) + ' <span style="font-size:10px;color:#F59E0B;">(viewing as)</span>';
+        document.getElementById('userAvatar').innerHTML = name ? name.charAt(0).toUpperCase() : '?';
+    } else {
+        // Reset to self
+        staffRecord = null;
+        for (var j = 0; j < allStaff.length; j++) {
+            if (ev(allStaff[j].name) === currentUserFullName) { staffRecord = allStaff[j]; break; }
+        }
+        if (!staffRecord && allStaff.length > 0) staffRecord = allStaff[0];
+        var n = staffRecord ? ev(staffRecord.name) : currentUserFullName;
+        document.getElementById('userName').innerHTML = escHtml(n);
+        document.getElementById('userAvatar').innerHTML = n ? n.charAt(0).toUpperCase() : '?';
+    }
+    filterMyOperations();
+    renderTasks();
+    renderTimeLog();
+    renderProfile();
+}
+
+// ---- ORG CHART ----
+function renderOrgChart() {
+    var container = document.getElementById('orgChart');
+    if (!container) return;
+
+    // Group staff by role
+    var roleGroups = {};
+    var roleOrder = ['manager','supervisor','programmer','setup_operator','operator','qc_technician','deburr_operator','material_handler','shipping_technician','driver'];
+    var roleColors = { manager:'#F59E0B', supervisor:'#F59E0B', programmer:'#8B5CF6', setup_operator:'#3B82F6', operator:'#3B82F6', qc_technician:'#22C55E', deburr_operator:'#06B6D4', material_handler:'#EC4899', shipping_technician:'#F97316', driver:'#F97316' };
+
+    for (var i = 0; i < allStaff.length; i++) {
+        var role = ev(allStaff[i].role) || 'other';
+        if (!roleGroups[role]) roleGroups[role] = [];
+        roleGroups[role].push(allStaff[i]);
+    }
+
+    // Manager/supervisor at top
+    var html = '<div class="org-tree">';
+
+    // Top: Management
+    var mgrs = (roleGroups['manager'] || []).concat(roleGroups['supervisor'] || []);
+    if (mgrs.length > 0) {
+        html += '<div class="org-level org-top">';
+        for (var m = 0; m < mgrs.length; m++) {
+            html += orgNode(mgrs[m], roleColors[ev(mgrs[m].role)] || '#F59E0B');
+        }
+        html += '</div>';
+        html += '<div class="org-connector"></div>';
+    } else {
+        // Show admin as implicit manager
+        html += '<div class="org-level org-top">';
+        html += '<div class="org-node" style="border-color:#F59E0B;"><div class="org-node-avatar" style="background:#F59E0B;">' + (currentUserFullName ? currentUserFullName.charAt(0) : 'A') + '</div>';
+        html += '<div class="org-node-name">' + escHtml(currentUserFullName || 'Admin') + '</div>';
+        html += '<div class="org-node-role">Manager</div></div>';
+        html += '</div>';
+        html += '<div class="org-connector"></div>';
+    }
+
+    // Middle: Technical roles
+    var techRoles = ['programmer','setup_operator','qc_technician'];
+    var techStaff = [];
+    for (var t = 0; t < techRoles.length; t++) {
+        if (roleGroups[techRoles[t]]) techStaff = techStaff.concat(roleGroups[techRoles[t]]);
+    }
+    if (techStaff.length > 0) {
+        html += '<div class="org-section-label">Technical &amp; Quality</div>';
+        html += '<div class="org-level">';
+        for (var ts = 0; ts < techStaff.length; ts++) {
+            html += orgNode(techStaff[ts], roleColors[ev(techStaff[ts].role)] || '#3B82F6');
+        }
+        html += '</div>';
+    }
+
+    // Bottom: Operations roles
+    var opsRoles = ['operator','deburr_operator','material_handler','shipping_technician','driver'];
+    var opsStaff = [];
+    for (var o = 0; o < opsRoles.length; o++) {
+        if (roleGroups[opsRoles[o]]) opsStaff = opsStaff.concat(roleGroups[opsRoles[o]]);
+    }
+    if (opsStaff.length > 0) {
+        html += '<div class="org-section-label">Operations &amp; Logistics</div>';
+        html += '<div class="org-level">';
+        for (var os = 0; os < opsStaff.length; os++) {
+            html += orgNode(opsStaff[os], roleColors[ev(opsStaff[os].role)] || '#3B82F6');
+        }
+        html += '</div>';
+    }
+
+    // Any ungrouped
+    var shown = ['manager','supervisor'].concat(techRoles).concat(opsRoles);
+    var other = [];
+    for (var role in roleGroups) {
+        if (shown.indexOf(role) === -1) other = other.concat(roleGroups[role]);
+    }
+    if (other.length > 0) {
+        html += '<div class="org-section-label">Other</div>';
+        html += '<div class="org-level">';
+        for (var ot = 0; ot < other.length; ot++) {
+            html += orgNode(other[ot], '#6B7280');
+        }
+        html += '</div>';
+    }
+
+    html += '</div>';
+
+    // Stats summary
+    html += '<div class="org-stats">';
+    html += '<div class="org-stat"><span class="org-stat-num">' + allStaff.length + '</span><span class="org-stat-label">Total Staff</span></div>';
+    var activeCount = 0;
+    for (var ac = 0; ac < allStaff.length; ac++) { var ss = ev(allStaff[ac].status); if (ss === 'available' || ss === 'assigned') activeCount++; }
+    html += '<div class="org-stat"><span class="org-stat-num" style="color:#22C55E;">' + activeCount + '</span><span class="org-stat-label">On Shift</span></div>';
+    var roleCount = Object.keys(roleGroups).length;
+    html += '<div class="org-stat"><span class="org-stat-num" style="color:#8B5CF6;">' + roleCount + '</span><span class="org-stat-label">Roles</span></div>';
+    html += '</div>';
+
+    container.innerHTML = html;
+}
+
+function orgNode(staff, color) {
+    var name = ev(staff.name);
+    var role = ev(staff.role);
+    var status = ev(staff.status);
+    var empId = ev(staff.employee_id);
+    var statusDot = status === 'available' || status === 'assigned' ? '#22C55E' : '#8B8D97';
+    return '<div class="org-node" style="border-color:' + color + ';">' +
+        '<div class="org-node-avatar" style="background:' + color + ';">' + (name ? name.charAt(0).toUpperCase() : '?') +
+        '<span class="org-status-dot" style="background:' + statusDot + ';"></span></div>' +
+        '<div class="org-node-name">' + escHtml(name) + '</div>' +
+        '<div class="org-node-role">' + formatRole(role) + '</div>' +
+        (empId ? '<div class="org-node-id">' + escHtml(empId) + '</div>' : '') +
+    '</div>';
+}
+
 function findOp(sysId) {
     for (var i = 0; i < allOperations.length; i++) {
         if (eid(allOperations[i].sys_id) === sysId) return allOperations[i];
@@ -1068,6 +1225,28 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
 .toast.error { border-color:var(--danger); }
 .toast.show { opacity:1; }
 
+.view-as-select { padding:5px 8px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:11px; outline:none; max-width:160px; }
+.view-as-select:focus { border-color:var(--accent); }
+.view-as-select option { background:var(--bg-primary); }
+
+.org-tree { display:flex; flex-direction:column; align-items:center; gap:8px; padding:10px 0; }
+.org-level { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; width:100%; }
+.org-level.org-top { margin-bottom:4px; }
+.org-connector { width:2px; height:20px; background:var(--border); }
+.org-section-label { font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin:12px 0 6px; padding:6px 12px; background:var(--bg-secondary); border-radius:4px; width:100%; text-align:center; }
+.org-node { background:var(--bg-secondary); border:1px solid var(--border); border-top:3px solid; border-radius:10px; padding:12px; text-align:center; min-width:90px; max-width:110px; transition:transform 0.2s; }
+.org-node:hover { transform:translateY(-2px); }
+.org-node-avatar { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; color:white; margin:0 auto 6px; position:relative; }
+.org-status-dot { position:absolute; bottom:0; right:0; width:10px; height:10px; border-radius:50%; border:2px solid var(--bg-secondary); }
+.org-node-name { font-size:12px; font-weight:600; color:var(--text-primary); line-height:1.2; }
+.org-node-role { font-size:10px; color:var(--text-secondary); margin-top:2px; }
+.org-node-id { font-size:9px; color:var(--accent); margin-top:3px; }
+
+.org-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:16px; }
+.org-stat { background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:14px; text-align:center; }
+.org-stat-num { font-size:24px; font-weight:700; color:var(--text-primary); display:block; }
+.org-stat-label { font-size:10px; color:var(--text-secondary); text-transform:uppercase; margin-top:4px; display:block; }
+
 .dashboard-link { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; margin-top:8px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; color:var(--accent); text-decoration:none; font-size:13px; font-weight:600; }
 
 .add-btn { background:var(--accent); color:white; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; }
@@ -1086,6 +1265,7 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
         </div>
     </div>
     <div class="header-right">
+        <select class="view-as-select mgr-only" id="viewAsSelect" onchange="switchViewAs()"><option value="">View as yourself</option></select>
         <span class="role-badge employee" id="roleBadge">EMPLOYEE</span>
         <button class="clock-btn clock-in" id="clockBtn" onclick="toggleClock()">Clock In</button>
     </div>
@@ -1097,6 +1277,12 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
         <div id="activeTaskArea"></div>
         <div class="section-header">My Operations</div>
         <div id="myOperations"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+    </div>
+
+    <!-- ORG CHART (Manager) -->
+    <div class="tab-content mgr-only" id="tab-org">
+        <div class="section-header">Organization Structure</div>
+        <div id="orgChart"><div class="loading"><div class="spinner"></div>Loading...</div></div>
     </div>
 
     <!-- TEAM (Manager) -->
@@ -1176,6 +1362,10 @@ html, body { margin:0; padding:0; background:var(--bg-primary); color:var(--text
     <button class="tab-btn active" onclick="switchTab('tasks',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         Tasks
+    </button>
+    <button class="tab-btn mgr-only" onclick="switchTab('org',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="6" y1="16" x2="18" y2="16"/><line x1="6" y1="12" x2="18" y2="12"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="19" r="2.5"/><circle cx="12" cy="19" r="2.5"/><line x1="6" y1="16" x2="6" y2="16.5"/><line x1="12" y1="12" x2="12" y2="16.5"/><line x1="18" y1="16" x2="18" y2="16.5"/></svg>
+        Org
     </button>
     <button class="tab-btn mgr-only" onclick="switchTab('team',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
