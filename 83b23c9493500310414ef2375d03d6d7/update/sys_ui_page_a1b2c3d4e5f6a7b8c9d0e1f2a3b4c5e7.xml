@@ -143,12 +143,12 @@ function loadAllStaff() {
         var name = staffRecord ? ev(staffRecord.name) : currentUserFullName;
         document.getElementById('userName').innerHTML = escHtml(name || 'Employee');
         document.getElementById('userAvatar').innerHTML = name ? name.charAt(0).toUpperCase() : '?';
-        var role = staffRecord ? ev(staffRecord.role) : '';
+        var role = staffRecord ? eid(staffRecord.role) : '';
         document.getElementById('userRole').innerHTML = role ? formatRole(role) : (isManager ? 'Manager' : 'Employee');
 
         // Clock status
         if (staffRecord) {
-            var status = ev(staffRecord.status);
+            var status = eid(staffRecord.status);
             clockedIn = (status === 'available' || status === 'assigned');
             updateClockBtn();
         }
@@ -187,7 +187,7 @@ function filterMyJobs() {
     // If no specific assignments and employee, show all active jobs
     if (myJobs.length === 0 && !isManager) {
         for (var j = 0; j < allJobs.length; j++) {
-            var st = ev(allJobs[j].job_status);
+            var st = eid(allJobs[j].job_status);
             if (st !== 'complete' && st !== 'shipped') {
                 myJobs.push(allJobs[j]);
             }
@@ -202,7 +202,7 @@ function renderTasks() {
 
     var activeJob = null;
     for (var i = 0; i < myJobs.length; i++) {
-        if (ev(myJobs[i].job_status) === 'in_progress') { activeJob = myJobs[i]; break; }
+        if (eid(myJobs[i].job_status) === 'in_progress') { activeJob = myJobs[i]; break; }
     }
 
     if (activeJob) {
@@ -228,7 +228,7 @@ function renderTasks() {
     // Group by status
     var staged = { assigned: [], pending_review: [], not_started: [] };
     for (var j = 0; j < myJobs.length; j++) {
-        var st = ev(myJobs[j].job_status);
+        var st = eid(myJobs[j].job_status);
         if (st === 'in_progress' || st === 'complete' || st === 'shipped') continue;
         if (staged[st]) staged[st].push(myJobs[j]);
         else staged.not_started.push(myJobs[j]);
@@ -262,10 +262,10 @@ function renderJobList(jobs, canStart) {
     var html = '';
     for (var i = 0; i < jobs.length; i++) {
         var job = jobs[i];
-        var status = ev(job.job_status) || 'not_started';
+        var status = eid(job.job_status) || 'not_started';
         var jobNum = ev(job.job_number);
         var poNum = ev(job.po_number);
-        var pri = ev(job.priority);
+        var pri = eid(job.priority);
         var qty = ev(job.quantity_due);
         var dueDate = ev(job.customer_due_date);
         var assignee = ev(job.assigned_to);
@@ -303,7 +303,7 @@ function renderTeam() {
     if (viewAs && viewAs.options.length <= 1) {
         var vopts = '<option value="">View as yourself</option>';
         for (var v = 0; v < allStaff.length; v++) {
-            vopts += '<option value="' + eid(allStaff[v].sys_id) + '">' + escHtml(ev(allStaff[v].name)) + ' (' + formatRole(ev(allStaff[v].role)) + ')</option>';
+            vopts += '<option value="' + eid(allStaff[v].sys_id) + '">' + escHtml(ev(allStaff[v].name)) + ' (' + formatRole(eid(allStaff[v].role)) + ')</option>';
         }
         viewAs.innerHTML = vopts;
     }
@@ -313,7 +313,7 @@ function renderTeam() {
 
     var activeCount = 0;
     for (var i = 0; i < allStaff.length; i++) {
-        var s = ev(allStaff[i].status);
+        var s = eid(allStaff[i].status);
         if (s === 'available' || s === 'assigned') activeCount++;
     }
     document.getElementById('teamCount').innerHTML = activeCount + '/' + allStaff.length + ' active';
@@ -326,7 +326,7 @@ function renderTeam() {
     var html = '';
     var groups = { available: [], assigned: [], off: [] };
     for (var j = 0; j < allStaff.length; j++) {
-        var st = ev(allStaff[j].status) || 'off';
+        var st = eid(allStaff[j].status) || 'off';
         if (!groups[st]) groups[st] = [];
         groups[st].push(allStaff[j]);
     }
@@ -341,11 +341,11 @@ function renderTeam() {
         for (var k = 0; k < grp.length; k++) {
             var m = grp[k];
             var name = ev(m.name);
-            var role = ev(m.role);
+            var role = eid(m.role);
             var empId = ev(m.employee_id);
             var curJob = ev(m.current_job);
             var curMachine = ev(m.current_machine);
-            var status = ev(m.status);
+            var status = eid(m.status);
             var sid = eid(m.sys_id);
 
             html += '<div class="team-card" onclick="openStaffDetail(\'' + sid + '\')">' +
@@ -372,8 +372,8 @@ function renderAssignments() {
 
     var unassignedCount = 0;
     for (var i = 0; i < allJobs.length; i++) {
-        var st = ev(allJobs[i].job_status);
-        if (st === 'not_started' && !ev(allJobs[i].assigned_to)) unassignedCount++;
+        var st = eid(allJobs[i].job_status);
+        if (st === 'not_started' && !eid(allJobs[i].assigned_to)) unassignedCount++;
     }
     document.getElementById('unassignedCount').innerHTML = unassignedCount + ' unassigned';
 
@@ -382,7 +382,7 @@ function renderAssignments() {
         var s = allStaff[j];
         var sid = eid(s.sys_id);
         var name = ev(s.name);
-        var status = ev(s.status);
+        var status = eid(s.status);
         var workCount = countStaffJobs(sid);
         html += '<div class="staff-chip' + (selectedAssignStaff === sid ? ' selected' : '') + '" id="chip_' + sid + '" onclick="selectStaffForAssign(\'' + sid + '\')">' +
             '<div class="chip-avatar">' + (name ? name.charAt(0).toUpperCase() : '?') + '</div>' +
@@ -395,7 +395,7 @@ function renderAssignments() {
     if (!selectedAssignStaff && allStaff.length > 0) {
         var first = allStaff[0];
         for (var k = 0; k < allStaff.length; k++) {
-            if (ev(allStaff[k].status) === 'available') { first = allStaff[k]; break; }
+            if (eid(allStaff[k].status) === 'available') { first = allStaff[k]; break; }
         }
         selectStaffForAssign(eid(first.sys_id));
     } else if (selectedAssignStaff) {
@@ -407,7 +407,7 @@ function countStaffJobs(staffSysId) {
     var count = 0;
     for (var i = 0; i < allJobs.length; i++) {
         var aId = eid(allJobs[i].assigned_to);
-        var st = ev(allJobs[i].job_status);
+        var st = eid(allJobs[i].job_status);
         if (aId === staffSysId && st !== 'complete' && st !== 'shipped') count++;
     }
     return count;
@@ -435,7 +435,7 @@ function renderAssignDashboard(staffSysId) {
     var theirJobs = [];
     for (var i = 0; i < allJobs.length; i++) {
         var aId = eid(allJobs[i].assigned_to);
-        var st = ev(allJobs[i].job_status);
+        var st = eid(allJobs[i].job_status);
         if (aId === staffSysId && st !== 'complete' && st !== 'shipped') theirJobs.push(allJobs[i]);
     }
 
@@ -443,8 +443,8 @@ function renderAssignDashboard(staffSysId) {
     var available = [];
     for (var j = 0; j < allJobs.length; j++) {
         var jb = allJobs[j];
-        var jSt = ev(jb.job_status);
-        if ((jSt === 'not_started') && !ev(jb.assigned_to)) available.push(jb);
+        var jSt = eid(jb.job_status);
+        if ((jSt === 'not_started') && !eid(jb.assigned_to)) available.push(jb);
     }
 
     var leftHtml = '<div class="assign-col-header">' + escHtml(staffName) + '\'s Jobs (' + theirJobs.length + ')</div>';
@@ -453,7 +453,7 @@ function renderAssignDashboard(staffSysId) {
     } else {
         for (var k = 0; k < theirJobs.length; k++) {
             var o = theirJobs[k];
-            var oSt = ev(o.job_status);
+            var oSt = eid(o.job_status);
             leftHtml += '<div class="op-item" style="cursor:default;">' +
                 '<div class="op-seq">' + escHtml(ev(o.priority)).charAt(0).toUpperCase() + '</div>' +
                 '<div class="op-info">' +
@@ -483,7 +483,7 @@ function renderAvailableJobs(jobs) {
     for (var i = 0; i < jobs.length; i++) {
         var jb = jobs[i];
         var sid = eid(jb.sys_id);
-        var pri = ev(jb.priority);
+        var pri = eid(jb.priority);
         html += '<div class="op-item assign-available-op">' +
             '<div class="op-seq" style="' +
                 (pri === 'critical' ? 'background:rgba(239,68,68,0.2);color:#EF4444;' :
@@ -506,7 +506,7 @@ function filterAvailableJobs() {
     var available = [];
     for (var i = 0; i < allJobs.length; i++) {
         var jb = allJobs[i];
-        if (ev(jb.job_status) !== 'not_started' || ev(jb.assigned_to)) continue;
+        if (eid(jb.job_status) !== 'not_started' || eid(jb.assigned_to)) continue;
         if (filter) {
             var jn = ev(jb.job_number).toLowerCase();
             var po = ev(jb.po_number).toLowerCase();
@@ -542,7 +542,7 @@ function renderReview() {
     var recentlyCompleted = [];
     for (var i = 0; i < allJobs.length; i++) {
         var jb = allJobs[i];
-        var st = ev(jb.job_status);
+        var st = eid(jb.job_status);
         if (st === 'pending_review') {
             pending.push(jb);
         } else if (st === 'complete') {
@@ -602,7 +602,7 @@ function renderMachines() {
     var container = document.getElementById('machineList');
     var runCount = 0;
     for (var i = 0; i < allMachines.length; i++) {
-        if (ev(allMachines[i].status) === 'running') runCount++;
+        if (eid(allMachines[i].status) === 'running') runCount++;
     }
     document.getElementById('machineCount').innerHTML = runCount + '/' + allMachines.length + ' running';
 
@@ -614,7 +614,7 @@ function renderMachines() {
     var html = '<div class="machine-grid">';
     for (var j = 0; j < allMachines.length; j++) {
         var m = allMachines[j];
-        var status = ev(m.status) || 'idle';
+        var status = eid(m.status) || 'idle';
         var name = ev(m.machine_name);
         var number = ev(m.machine_number);
         var job = ev(m.current_job);
@@ -635,14 +635,14 @@ function renderMachines() {
 function renderProfile() {
     if (!staffRecord) return;
     document.getElementById('profileEmpId').innerHTML = ev(staffRecord.employee_id) || '--';
-    document.getElementById('profileRole').innerHTML = formatRole(ev(staffRecord.role));
-    document.getElementById('profileShift').innerHTML = (ev(staffRecord.shift) || '--').toUpperCase();
-    document.getElementById('profileStatus').innerHTML = '<span class="badge ' + ev(staffRecord.status) + '">' + ev(staffRecord.status) + '</span>';
+    document.getElementById('profileRole').innerHTML = formatRole(eid(staffRecord.role));
+    document.getElementById('profileShift').innerHTML = (eid(staffRecord.shift) || '--').toUpperCase();
+    document.getElementById('profileStatus').innerHTML = '<span class="badge ' + eid(staffRecord.status) + '">' + eid(staffRecord.status) + '</span>';
     document.getElementById('profileMachine').innerHTML = ev(staffRecord.current_machine) || 'None';
 
     var completedCount = 0;
     for (var i = 0; i < myJobs.length; i++) {
-        if (ev(myJobs[i].job_status) === 'complete') completedCount++;
+        if (eid(myJobs[i].job_status) === 'complete') completedCount++;
     }
     document.getElementById('statJobsCompleted').innerHTML = completedCount;
     document.getElementById('statHoursLogged').innerHTML = myJobs.length;
@@ -654,7 +654,7 @@ function renderProfile() {
 function startJobConfirm(sysId) {
     var job = findJob(sysId);
     if (!job) return;
-    var status = ev(job.job_status);
+    var status = eid(job.job_status);
     if (status === 'assigned') {
         if (confirm('Start working on ' + ev(job.job_number) + '?')) startJob(sysId);
     } else if (status === 'not_started') {
@@ -770,7 +770,7 @@ function openMachineModal(sysId) {
     }
     if (!machine) return;
     selectedMachineSysId = sysId;
-    selectedMachineStatus = ev(machine.status);
+    selectedMachineStatus = eid(machine.status);
     document.getElementById('machineModalName').innerHTML = escHtml(ev(machine.machine_name));
     document.getElementById('machineModalInfo').innerHTML = escHtml(ev(machine.machine_number)) + ' &bull; ' + escHtml(ev(machine.machine_type));
     var opts = document.querySelectorAll('.status-option');
@@ -856,7 +856,7 @@ function renderOrgChart() {
     var roleColors = { manager:'#F59E0B', supervisor:'#F59E0B', programmer:'#8B5CF6', setup_operator:'#3B82F6', operator:'#3B82F6', qc_technician:'#22C55E', deburr_operator:'#06B6D4', material_handler:'#EC4899', shipping_technician:'#F97316', driver:'#F97316' };
 
     for (var i = 0; i < allStaff.length; i++) {
-        var role = ev(allStaff[i].role) || 'other';
+        var role = eid(allStaff[i].role) || 'other';
         if (!roleGroups[role]) roleGroups[role] = [];
         roleGroups[role].push(allStaff[i]);
     }
@@ -869,7 +869,7 @@ function renderOrgChart() {
     if (mgrs.length > 0) {
         html += '<div class="org-level org-top">';
         for (var m = 0; m < mgrs.length; m++) {
-            html += orgNode(mgrs[m], roleColors[ev(mgrs[m].role)] || '#F59E0B');
+            html += orgNode(mgrs[m], roleColors[eid(mgrs[m].role)] || '#F59E0B');
         }
         html += '</div>';
         html += '<div class="org-connector"></div>';
@@ -893,7 +893,7 @@ function renderOrgChart() {
         html += '<div class="org-section-label">Technical &amp; Quality</div>';
         html += '<div class="org-level">';
         for (var ts = 0; ts < techStaff.length; ts++) {
-            html += orgNode(techStaff[ts], roleColors[ev(techStaff[ts].role)] || '#3B82F6');
+            html += orgNode(techStaff[ts], roleColors[eid(techStaff[ts].role)] || '#3B82F6');
         }
         html += '</div>';
     }
@@ -908,7 +908,7 @@ function renderOrgChart() {
         html += '<div class="org-section-label">Operations &amp; Logistics</div>';
         html += '<div class="org-level">';
         for (var os = 0; os < opsStaff.length; os++) {
-            html += orgNode(opsStaff[os], roleColors[ev(opsStaff[os].role)] || '#3B82F6');
+            html += orgNode(opsStaff[os], roleColors[eid(opsStaff[os].role)] || '#3B82F6');
         }
         html += '</div>';
     }
@@ -934,7 +934,7 @@ function renderOrgChart() {
     html += '<div class="org-stats">';
     html += '<div class="org-stat"><span class="org-stat-num">' + allStaff.length + '</span><span class="org-stat-label">Total Staff</span></div>';
     var activeCount = 0;
-    for (var ac = 0; ac < allStaff.length; ac++) { var ss = ev(allStaff[ac].status); if (ss === 'available' || ss === 'assigned') activeCount++; }
+    for (var ac = 0; ac < allStaff.length; ac++) { var ss = eid(allStaff[ac].status); if (ss === 'available' || ss === 'assigned') activeCount++; }
     html += '<div class="org-stat"><span class="org-stat-num" style="color:#22C55E;">' + activeCount + '</span><span class="org-stat-label">On Shift</span></div>';
     var roleCount = Object.keys(roleGroups).length;
     html += '<div class="org-stat"><span class="org-stat-num" style="color:#8B5CF6;">' + roleCount + '</span><span class="org-stat-label">Roles</span></div>';
@@ -945,8 +945,8 @@ function renderOrgChart() {
 
 function orgNode(staff, color) {
     var name = ev(staff.name);
-    var role = ev(staff.role);
-    var status = ev(staff.status);
+    var role = eid(staff.role);
+    var status = eid(staff.status);
     var empId = ev(staff.employee_id);
     var statusDot = status === 'available' || status === 'assigned' ? '#22C55E' : '#8B8D97';
     return '<div class="org-node" style="border-color:' + color + ';">' +
