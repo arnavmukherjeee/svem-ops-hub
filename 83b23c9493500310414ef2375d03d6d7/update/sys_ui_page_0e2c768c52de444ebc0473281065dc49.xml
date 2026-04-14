@@ -1,48 +1,653 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page">
     <sys_ui_page action="INSERT_OR_UPDATE">
         <category>general</category>
-        <client_script/>
+        <client_script><![CDATA[
+// ============================================================
+// SVEM Command Center - Manager Dashboard
+// Self-contained: no UX framework dependency
+// ============================================================
+
+var API_BASE = '/api/now/table';
+var HEADERS = { 'Accept':'application/json','Content-Type':'application/json','X-UserToken': window.g_ck || '' };
+
+function ev(f){ if(!f) return ''; if(typeof f==='object') return f.display_value||f.value||''; return f; }
+function eid(f){ if(!f) return ''; if(typeof f==='object') return f.value||''; return f; }
+function escHtml(s){ var d=document.createElement('div'); d.appendChild(document.createTextNode(s||'')); return d.innerHTML; }
+
+function apiGet(table, params){
+    var url = API_BASE+'/'+table;
+    if(params){ var qs=[]; for(var k in params){ qs.push(encodeURIComponent(k)+'='+encodeURIComponent(params[k])); } url+='?'+qs.join('&'); }
+    return fetch(url,{method:'GET',headers:HEADERS}).then(function(r){ if(!r.ok) throw new Error('API '+r.status); return r.json(); }).then(function(d){ return d.result||[]; });
+}
+function apiPatch(table, sysId, data){
+    return fetch(API_BASE+'/'+table+'/'+sysId,{method:'PATCH',headers:HEADERS,body:JSON.stringify(data)}).then(function(r){ if(!r.ok) throw new Error('API '+r.status); return r.json(); }).then(function(d){ return d.result; });
+}
+
+var allJobs=[], allStaff=[], allMachines=[];
+var selectedAssignStaff = null;
+var currentTab = 'overview';
+
+function loadAll(){
+    return Promise.all([
+        apiGet('x_1964226_svem_com_jobs',{sysparm_display_value:'all',sysparm_fields:'sys_id,job_number,po_number,customer,job_status,priority,assigned_to,assigned_machine,customer_due_date,ship_by_date,ship_status,quantity_due,notes,job_type',sysparm_query:'ORDERBYpriority',sysparm_limit:'200'}).then(function(j){allJobs=j;}),
+        apiGet('x_1964226_svem_com_staff',{sysparm_display_value:'all',sysparm_fields:'sys_id,name,employee_id,role,shift,status,current_job,current_machine,jobs_completed_this_week,notes',sysparm_limit:'200'}).then(function(s){allStaff=s;}),
+        apiGet('x_1964226_svem_com_machines',{sysparm_display_value:'all',sysparm_fields:'sys_id,machine_name,machine_number,machine_type,status,current_job,uptime_percentage',sysparm_limit:'50'}).then(function(m){allMachines=m;})
+    ]);
+}
+
+function refreshAll(){
+    return loadAll().then(function(){ renderCurrentTab(); });
+}
+
+function renderCurrentTab(){
+    if(currentTab==='overview') renderOverview();
+    else if(currentTab==='jobs') renderJobs();
+    else if(currentTab==='staff') renderStaff();
+    else if(currentTab==='machines') renderMachines();
+    else if(currentTab==='assign') renderAssign();
+    else if(currentTab==='review') renderReview();
+}
+
+// ---- TAB SWITCHING ----
+function switchTab(name, btn){
+    currentTab = name;
+    var tabs = document.querySelectorAll('.tab-content');
+    for(var i=0;i<tabs.length;i++) tabs[i].className='tab-content';
+    document.getElementById('tab-'+name).className='tab-content active';
+    var btns = document.querySelectorAll('.nav-btn');
+    for(var j=0;j<btns.length;j++) btns[j].className=btns[j].className.replace(' active','');
+    if(btn) btn.className+=' active';
+    renderCurrentTab();
+}
+
+// ---- HELPERS ----
+function countByStatus(status){
+    var c=0; for(var i=0;i<allJobs.length;i++){ if(eid(allJobs[i].job_status)===status) c++; } return c;
+}
+function countByPriority(pri){
+    var c=0; for(var i=0;i<allJobs.length;i++){ if(eid(allJobs[i].priority)===pri) c++; } return c;
+}
+function staffJobCount(staffSysId){
+    var c=0; for(var i=0;i<allJobs.length;i++){
+        var st=eid(allJobs[i].job_status);
+        if(eid(allJobs[i].assigned_to)===staffSysId && st!=='complete' && st!=='shipped') c++;
+    } return c;
+}
+function truncate(s,n){ s=s||''; return s.length>n ? s.substring(0,n)+'...' : s; }
+function priorityColor(p){
+    if(p==='critical') return '#EF4444';
+    if(p==='high') return '#F59E0B';
+    if(p==='medium') return '#3B82F6';
+    return '#8B8D97';
+}
+function statusBadge(status){
+    return '<span class="badge '+escHtml(status)+'">'+escHtml(status.replace(/_/g,' '))+'</span>';
+}
+function formatRole(r){ return r ? r.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();}) : ''; }
+
+// ---- OVERVIEW ----
+function renderOverview(){
+    var total=allJobs.length;
+    var notStarted=countByStatus('not_started');
+    var assigned=countByStatus('assigned');
+    var inProgress=countByStatus('in_progress');
+    var pendingReview=countByStatus('pending_review');
+    var complete=countByStatus('complete');
+    var shipped=countByStatus('shipped');
+
+    var critical=countByPriority('critical');
+    var high=countByPriority('high');
+
+    var activeStaff=0;
+    for(var i=0;i<allStaff.length;i++){
+        var ss=eid(allStaff[i].status);
+        if(ss==='available'||ss==='assigned') activeStaff++;
+    }
+    var runningMachines=0;
+    for(var j=0;j<allMachines.length;j++){
+        if(eid(allMachines[j].status)==='running') runningMachines++;
+    }
+
+    var html='';
+    // KPI row
+    html+='<div class="kpi-grid">';
+    html+='<div class="kpi-card"><div class="kpi-num">'+total+'</div><div class="kpi-label">Total Jobs</div></div>';
+    html+='<div class="kpi-card"><div class="kpi-num accent">'+inProgress+'</div><div class="kpi-label">In Progress</div></div>';
+    html+='<div class="kpi-card"><div class="kpi-num warning">'+(pendingReview)+'</div><div class="kpi-label">Pending Review</div></div>';
+    html+='<div class="kpi-card"><div class="kpi-num success">'+complete+'</div><div class="kpi-label">Complete</div></div>';
+    html+='</div>';
+
+    // Secondary KPIs
+    html+='<div class="kpi-grid four">';
+    html+='<div class="kpi-card-sm"><div class="kpi-num-sm">'+notStarted+'</div><div class="kpi-label">Not Started</div></div>';
+    html+='<div class="kpi-card-sm"><div class="kpi-num-sm" style="color:#A78BFA">'+assigned+'</div><div class="kpi-label">Assigned</div></div>';
+    html+='<div class="kpi-card-sm"><div class="kpi-num-sm">'+shipped+'</div><div class="kpi-label">Shipped</div></div>';
+    html+='<div class="kpi-card-sm"><div class="kpi-num-sm" style="color:#EF4444">'+critical+'</div><div class="kpi-label">Critical</div></div>';
+    html+='</div>';
+
+    // Resources
+    html+='<div class="section-header">Resources</div>';
+    html+='<div class="kpi-grid two">';
+    html+='<div class="kpi-card"><div class="kpi-num accent">'+activeStaff+' <span style="font-size:14px;color:#8B8D97">/ '+allStaff.length+'</span></div><div class="kpi-label">Staff Active</div></div>';
+    html+='<div class="kpi-card"><div class="kpi-num success">'+runningMachines+' <span style="font-size:14px;color:#8B8D97">/ '+allMachines.length+'</span></div><div class="kpi-label">Machines Running</div></div>';
+    html+='</div>';
+
+    // Urgent jobs
+    var urgent=[];
+    for(var u=0;u<allJobs.length;u++){
+        var p=eid(allJobs[u].priority);
+        var st=eid(allJobs[u].job_status);
+        if((p==='critical'||p==='high') && st!=='complete' && st!=='shipped') urgent.push(allJobs[u]);
+    }
+    if(urgent.length>0){
+        html+='<div class="section-header">Urgent Jobs ('+urgent.length+')</div>';
+        for(var k=0;k<urgent.length&&k<8;k++){
+            html+=renderJobRow(urgent[k]);
+        }
+    }
+
+    document.getElementById('tab-overview').innerHTML=html;
+}
+
+// ---- JOBS ----
+function renderJobs(){
+    var html='<div class="section-header">All Jobs ('+allJobs.length+')</div>';
+    var groups = ['not_started','assigned','in_progress','pending_review','complete','shipped'];
+    var labels = {'not_started':'Not Started','assigned':'Assigned','in_progress':'In Progress','pending_review':'Pending Review','complete':'Complete','shipped':'Shipped'};
+    for(var g=0;g<groups.length;g++){
+        var status=groups[g];
+        var items=[];
+        for(var i=0;i<allJobs.length;i++){
+            if(eid(allJobs[i].job_status)===status) items.push(allJobs[i]);
+        }
+        if(items.length===0) continue;
+        html+='<div class="stage-label '+status+'">'+labels[status]+' ('+items.length+')</div>';
+        for(var j=0;j<items.length;j++){
+            html+=renderJobRow(items[j]);
+        }
+    }
+    document.getElementById('tab-jobs').innerHTML=html;
+}
+
+function renderJobRow(job){
+    var pri=eid(job.priority);
+    var st=eid(job.job_status);
+    var notes=ev(job.notes);
+    var cust=ev(job.customer);
+    var assigned=ev(job.assigned_to);
+    var h='<div class="job-row" onclick="openJobDetail(\''+eid(job.sys_id)+'\')">';
+    h+='<div class="job-row-pri" style="background:'+priorityColor(pri)+'"></div>';
+    h+='<div class="job-row-info">';
+    h+='<div class="job-row-top"><span class="job-row-num">'+escHtml(ev(job.job_number))+'</span> '+statusBadge(st)+'</div>';
+    if(notes) h+='<div class="job-row-notes">'+escHtml(truncate(notes,80))+'</div>';
+    h+='<div class="job-row-meta">';
+    if(cust) h+='<span>'+escHtml(cust)+'</span>';
+    h+='<span>PO: '+escHtml(ev(job.po_number))+'</span>';
+    h+='<span>Qty: '+escHtml(ev(job.quantity_due))+'</span>';
+    if(assigned) h+='<span>&#9679; '+escHtml(assigned)+'</span>';
+    h+='</div>';
+    h+='</div></div>';
+    return h;
+}
+
+function openJobDetail(sysId){
+    window.open('/x_1964226_svem_com_jobs.do?sys_id='+sysId,'_blank');
+}
+
+// ---- STAFF ----
+function renderStaff(){
+    var html='<div class="section-header">Staff ('+allStaff.length+')</div>';
+    for(var i=0;i<allStaff.length;i++){
+        var s=allStaff[i];
+        var name=ev(s.name);
+        var status=eid(s.status);
+        var role=eid(s.role);
+        var jc=staffJobCount(eid(s.sys_id));
+        html+='<div class="staff-row">';
+        html+='<div class="staff-avatar" style="background:'+(['#3B82F6','#22C55E','#F59E0B','#EF4444','#A78BFA','#EC4899'][i%6])+'">'+escHtml((name||'?').charAt(0).toUpperCase())+'</div>';
+        html+='<div class="staff-info">';
+        html+='<div class="staff-name">'+escHtml(name)+' <span class="staff-empid">'+escHtml(ev(s.employee_id))+'</span></div>';
+        html+='<div class="staff-meta">'+escHtml(formatRole(role))+' &middot; '+escHtml(ev(s.shift))+' shift &middot; '+statusBadge(status)+' &middot; '+jc+' active job'+(jc!==1?'s':'')+'</div>';
+        html+='</div></div>';
+    }
+    document.getElementById('tab-staff').innerHTML=html;
+}
+
+// ---- MACHINES ----
+function renderMachines(){
+    var html='<div class="section-header">Machines ('+allMachines.length+')</div>';
+    html+='<div class="machine-grid">';
+    for(var i=0;i<allMachines.length;i++){
+        var m=allMachines[i];
+        var st=eid(m.status);
+        var curJob=ev(m.current_job);
+        html+='<div class="machine-card '+st+'" onclick="openMachineModal(\''+eid(m.sys_id)+'\')">';
+        html+='<div class="machine-card-name">'+escHtml(ev(m.machine_name))+'</div>';
+        html+='<div class="machine-card-number">'+escHtml(ev(m.machine_number))+'</div>';
+        html+=statusBadge(st);
+        if(curJob) html+='<div class="machine-card-job">'+escHtml(curJob)+'</div>';
+        var up=ev(m.uptime_percentage);
+        if(up) html+='<div class="machine-card-up">'+escHtml(up)+'% uptime</div>';
+        html+='</div>';
+    }
+    html+='</div>';
+    document.getElementById('tab-machines').innerHTML=html;
+}
+
+var selectedMachineSysId=null, selectedMachineStatus=null;
+function openMachineModal(sysId){
+    selectedMachineSysId=sysId; selectedMachineStatus=null;
+    var m=null;
+    for(var i=0;i<allMachines.length;i++){ if(eid(allMachines[i].sys_id)===sysId){ m=allMachines[i]; break; } }
+    if(!m) return;
+    document.getElementById('machineModalName').innerHTML=escHtml(ev(m.machine_name));
+    document.getElementById('machineModalInfo').innerHTML=escHtml(ev(m.machine_number))+' &middot; '+escHtml(ev(m.machine_type));
+    var opts=document.querySelectorAll('.status-option');
+    for(var j=0;j<opts.length;j++) opts[j].className='status-option';
+    document.getElementById('machineModal').className='modal-overlay active';
+}
+function selectMachineStatus(st,el){
+    selectedMachineStatus=st;
+    var opts=document.querySelectorAll('.status-option');
+    for(var i=0;i<opts.length;i++) opts[i].className='status-option';
+    el.className='status-option selected';
+}
+function saveMachineStatus(){
+    if(!selectedMachineSysId||!selectedMachineStatus) return;
+    apiPatch('x_1964226_svem_com_machines',selectedMachineSysId,{status:selectedMachineStatus}).then(function(){
+        closeModal('machineModal'); showToast('Machine updated','success'); return refreshAll();
+    }).catch(function(e){ showToast('Error: '+e.message,'error'); });
+}
+
+// ---- ASSIGN ----
+function renderAssign(){
+    var html='<div class="section-header">Assign Work</div>';
+    // Staff picker
+    html+='<div class="staff-picker">';
+    for(var i=0;i<allStaff.length;i++){
+        var s=allStaff[i];
+        var sid=eid(s.sys_id);
+        var name=ev(s.name);
+        var sel=selectedAssignStaff===sid?' selected':'';
+        var jc=staffJobCount(sid);
+        html+='<div class="staff-chip'+sel+'" onclick="selectAssignStaff(\''+sid+'\')">';
+        html+='<div class="chip-avatar">'+escHtml((name||'?').charAt(0).toUpperCase())+'</div>';
+        html+='<div><div class="chip-name">'+escHtml(name)+'</div><div class="chip-meta">'+jc+' job'+(jc!==1?'s':'')+'</div></div>';
+        html+='</div>';
+    }
+    html+='</div>';
+
+    if(selectedAssignStaff){
+        // Two columns: their jobs | available jobs
+        html+='<div class="assign-split">';
+
+        // Left: assigned to this person
+        html+='<div class="assign-col">';
+        html+='<div class="assign-col-header">Their Jobs</div>';
+        var theirJobs=[];
+        for(var j=0;j<allJobs.length;j++){
+            var jst=eid(allJobs[j].job_status);
+            if(eid(allJobs[j].assigned_to)===selectedAssignStaff && jst!=='complete' && jst!=='shipped') theirJobs.push(allJobs[j]);
+        }
+        if(theirJobs.length===0) html+='<div class="empty-state">No active jobs</div>';
+        for(var t=0;t<theirJobs.length;t++){
+            var tj=theirJobs[t];
+            html+='<div class="assign-item">';
+            html+='<div class="assign-item-info"><div class="assign-item-num">'+escHtml(ev(tj.job_number))+'</div>';
+            var tn=ev(tj.notes); if(tn) html+='<div class="assign-item-notes">'+escHtml(truncate(tn,50))+'</div>';
+            html+='</div>';
+            html+='<button class="btn-unassign" onclick="unassignJob(\''+eid(tj.sys_id)+'\')">Unassign</button>';
+            html+='</div>';
+        }
+        html+='</div>';
+
+        // Right: available
+        html+='<div class="assign-col">';
+        html+='<div class="assign-col-header">Available Jobs</div>';
+        var avail=[];
+        for(var a=0;a<allJobs.length;a++){
+            var ast=eid(allJobs[a].job_status);
+            var aat=eid(allJobs[a].assigned_to);
+            if(!aat && ast!=='complete' && ast!=='shipped') avail.push(allJobs[a]);
+        }
+        if(avail.length===0) html+='<div class="empty-state">No unassigned jobs</div>';
+        for(var v=0;v<avail.length;v++){
+            var av=avail[v];
+            html+='<div class="assign-item">';
+            html+='<div class="assign-item-info"><div class="assign-item-num">'+escHtml(ev(av.job_number))+'</div>';
+            var an=ev(av.notes); if(an) html+='<div class="assign-item-notes">'+escHtml(truncate(an,50))+'</div>';
+            html+='</div>';
+            html+='<button class="btn-assign" onclick="assignJob(\''+eid(av.sys_id)+'\')">Assign</button>';
+            html+='</div>';
+        }
+
+        // Other staff's jobs
+        var others=[];
+        for(var o=0;o<allJobs.length;o++){
+            var ost=eid(allJobs[o].job_status);
+            var oat=eid(allJobs[o].assigned_to);
+            if(oat && oat!==selectedAssignStaff && ost!=='complete' && ost!=='shipped') others.push(allJobs[o]);
+        }
+        if(others.length>0){
+            html+='<div class="assign-col-header" style="margin-top:12px;">Other Staff\'s Jobs</div>';
+            for(var x=0;x<others.length;x++){
+                var oj=others[x];
+                html+='<div class="assign-item">';
+                html+='<div class="assign-item-info"><div class="assign-item-num">'+escHtml(ev(oj.job_number))+'</div>';
+                html+='<div class="assign-item-notes">'+escHtml(ev(oj.assigned_to))+'</div>';
+                html+='</div>';
+                html+='<button class="btn-reassign" onclick="reassignJob(\''+eid(oj.sys_id)+'\')">Reassign</button>';
+                html+='</div>';
+            }
+        }
+        html+='</div>';
+        html+='</div>';
+    } else {
+        html+='<div class="empty-state">Select a staff member above to manage assignments</div>';
+    }
+
+    document.getElementById('tab-assign').innerHTML=html;
+}
+
+function selectAssignStaff(sysId){
+    selectedAssignStaff=sysId;
+    renderAssign();
+}
+
+function assignJob(jobSysId){
+    if(!selectedAssignStaff) return;
+    var job=findJob(jobSysId);
+    var jobNum=job?ev(job.job_number):'';
+    apiPatch('x_1964226_svem_com_jobs',jobSysId,{assigned_to:selectedAssignStaff,job_status:'assigned'}).then(function(){
+        showToast(jobNum+' assigned','success'); return refreshAll();
+    }).catch(function(e){ showToast('Error: '+e.message,'error'); });
+}
+
+function unassignJob(jobSysId){
+    var job=findJob(jobSysId);
+    var jobNum=job?ev(job.job_number):'';
+    if(!confirm('Unassign '+jobNum+'?')) return;
+    apiPatch('x_1964226_svem_com_jobs',jobSysId,{assigned_to:'',job_status:'not_started'}).then(function(){
+        showToast(jobNum+' unassigned','success'); return refreshAll();
+    }).catch(function(e){ showToast('Error: '+e.message,'error'); });
+}
+
+function reassignJob(jobSysId){
+    if(!selectedAssignStaff) return;
+    var job=findJob(jobSysId);
+    var jobNum=job?ev(job.job_number):'';
+    var staffName='';
+    for(var i=0;i<allStaff.length;i++){
+        if(eid(allStaff[i].sys_id)===selectedAssignStaff){ staffName=ev(allStaff[i].name); break; }
+    }
+    if(!confirm('Reassign '+jobNum+' to '+staffName+'?')) return;
+    apiPatch('x_1964226_svem_com_jobs',jobSysId,{assigned_to:selectedAssignStaff,job_status:'assigned'}).then(function(){
+        showToast(jobNum+' reassigned to '+staffName,'success'); return refreshAll();
+    }).catch(function(e){ showToast('Error: '+e.message,'error'); });
+}
+
+// ---- REVIEW ----
+function renderReview(){
+    var pending=[];
+    for(var i=0;i<allJobs.length;i++){
+        if(eid(allJobs[i].job_status)==='pending_review') pending.push(allJobs[i]);
+    }
+    var html='<div class="section-header">Pending Review ('+pending.length+')</div>';
+    if(pending.length===0){
+        html+='<div class="empty-state">No jobs pending review</div>';
+    }
+    for(var j=0;j<pending.length;j++){
+        var p=pending[j];
+        var notes=ev(p.notes);
+        html+='<div class="review-card">';
+        html+='<div class="review-header">';
+        html+='<div><div class="review-job">'+escHtml(ev(p.job_number))+'</div>';
+        html+='<div class="review-meta">'+escHtml(ev(p.assigned_to))+' &middot; PO: '+escHtml(ev(p.po_number))+'</div>';
+        if(notes) html+='<div class="review-notes">'+escHtml(truncate(notes,100))+'</div>';
+        html+='</div></div>';
+        html+='<div class="review-actions">';
+        html+='<button class="action-btn success" onclick="approveJob(\''+eid(p.sys_id)+'\')">Approve</button>';
+        html+='<button class="action-btn danger" onclick="rejectJob(\''+eid(p.sys_id)+'\')">Reject</button>';
+        html+='</div></div>';
+    }
+    document.getElementById('tab-review').innerHTML=html;
+}
+
+function approveJob(sysId){
+    var job=findJob(sysId);
+    var jobNum=job?ev(job.job_number):'';
+    apiPatch('x_1964226_svem_com_jobs',sysId,{job_status:'complete'}).then(function(){
+        showToast(jobNum+' approved','success'); return refreshAll();
+    }).catch(function(e){ showToast('Error: '+e.message,'error'); });
+}
+
+function rejectJob(sysId){
+    var job=findJob(sysId);
+    var jobNum=job?ev(job.job_number):'';
+    apiPatch('x_1964226_svem_com_jobs',sysId,{job_status:'in_progress'}).then(function(){
+        showToast(jobNum+' sent back','warning'); return refreshAll();
+    }).catch(function(e){ showToast('Error: '+e.message,'error'); });
+}
+
+// ---- UTILS ----
+function findJob(sysId){
+    for(var i=0;i<allJobs.length;i++){ if(eid(allJobs[i].sys_id)===sysId) return allJobs[i]; } return null;
+}
+
+function closeModal(id){ document.getElementById(id).className='modal-overlay'; }
+
+function showToast(msg,type){
+    var t=document.getElementById('toast');
+    t.innerHTML=escHtml(msg);
+    t.className='toast '+(type||'')+' show';
+    setTimeout(function(){ t.className='toast'; },2500);
+}
+
+// ---- INIT ----
+window.onload = function(){
+    loadAll().then(function(){
+        renderOverview();
+    }).catch(function(e){
+        document.getElementById('tab-overview').innerHTML='<div class="empty-state">Error loading data: '+escHtml(e.message)+'</div>';
+    });
+};
+]]></client_script>
         <description>SVEM Command Center - Manufacturing Dashboard</description>
         <direct>true</direct>
         <endpoint>x_1964226_svem_com_dashboard.do</endpoint>
-        <html><![CDATA[<!-- @fluent-import-html WARNING: This file was imported from the output of a static build. Modifications of any kind are likely to result in unintended behavior. In most cases, you should edit the source file of the HTML imported below. If you are absolutely certain you want to take control of this HTML, you can remove this comment to prevent the SDK from regenerating it. However, you will then be responsible for the management of this HTML in your Fluent file. -->
-<html>
-  <head>
-    <title>SVEM Command Center Dashboard</title>
-    <!-- @sdk:now-ux-globals -->
-    <!-- Resolved from sdk:now-ux-globals tag at NowSDK build time to support earlier Glide releases -->
-    <script>window.NOW = {};
-window.NOW.user = {};
-window.NOW.batch_glide_ajax_requests = false;
-window.NOW.isUsingPolaris = true;
-window.NOW.exclude_dark_theme = "false";
-window.g_ck = "$[gs.getSession().getSessionToken() || gs.getSessionToken()]";</script>
-    <!-- Include ServiceNow's required scripts -->
-    <g:requires name="scripts/doctype/functions_bootstrap14.js"></g:requires>
-    <g:requires name="scripts/lib/prototype.js"></g:requires>
-    <g:requires name="scripts/classes/ajax/GlideURL.js"></g:requires>
-    <g:requires name="scripts/doctype/CustomEventManager.js"></g:requires>
-    <g:requires name="scripts/classes/ajax/GlideAjax.js"></g:requires>
-    <g:requires name="scripts/classes/GlideUser.js"></g:requires>
+        <html><![CDATA[<html>
+<head>
+    <title>SVEM Command Center</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>window.g_ck = "$[gs.getSession().getSessionToken() || gs.getSessionToken()]";</script>
     <g2:client_script type="user"></g2:client_script>
-    <link rel="preload" href="/uxasset/set-cache-buster/$[UxFrameworkScriptables.getFlushTimestamp()].js" as="script"></link>
-    <g:requires name="scripts/polaris_theme_refresh_observer.js"></g:requires>
-    <link data-source-id="glide-theme" id="polarisberg_theme_variables" rel="stylesheet" href="/$uxappimmutables.do?sysparm_request_type=ux_theme$[AMP]sysparm_app_sys_id=c86a62e2c7022010099a308dc7c26022$[AMP]uxpcb=$[sn_ui.PolarisUI.getThemeVariableCssCacheKey()]"></link>
-    <script type="module" src="/uxasset/externals/@devsnc/library-uxf/index.jsdbx"></script>
-    <!-- @sdk:now-ux-globals -->
-    <script src="/uxasset/externals/x_1964226_svem_com/main.jsdbx?uxpcb=$[UxFrameworkScriptables.getFlushTimestamp()]" type="module"></script>
-    <style>/* Remove all default margins/padding for true edge-to-edge */
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: #0F1117;
-      height: 100vh;
-      overflow: hidden;
-    }</style>
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+    <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    :root{--bg:#0F1117;--bg2:#1A1D27;--bg3:#2A2D3A;--border:#2A2D3A;--text:#E8E9ED;--text2:#8B8D97;--accent:#3B82F6;--success:#22C55E;--warning:#F59E0B;--danger:#EF4444;}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;}
+
+    .header{height:52px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;position:fixed;top:0;left:0;right:0;z-index:100;}
+    .header-title{font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:10px;}
+    .header-title span{font-size:11px;color:var(--accent);font-weight:500;background:rgba(59,130,246,0.12);padding:3px 8px;border-radius:4px;}
+    .header-link{font-size:12px;color:var(--accent);text-decoration:none;font-weight:500;}
+
+    .nav-bar{height:44px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:stretch;gap:0;position:fixed;top:52px;left:0;right:0;z-index:99;overflow-x:auto;}
+    .nav-bar::-webkit-scrollbar{display:none;}
+    .nav-btn{background:none;border:none;color:var(--text2);font-size:12px;font-weight:600;padding:0 18px;cursor:pointer;position:relative;white-space:nowrap;transition:color 0.15s;}
+    .nav-btn:hover{color:var(--text);}
+    .nav-btn.active{color:var(--accent);}
+    .nav-btn.active::after{content:'';position:absolute;bottom:0;left:8px;right:8px;height:2px;background:var(--accent);border-radius:2px 2px 0 0;}
+
+    .main{position:fixed;top:96px;bottom:0;left:0;right:0;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+    .tab-content{display:none;padding:20px;max-width:900px;margin:0 auto;}
+    .tab-content.active{display:block;}
+
+    .section-header{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:18px 0 10px;}
+    .section-header:first-child{margin-top:0;}
+
+    .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+    .kpi-grid.two{grid-template-columns:repeat(2,1fr);}
+    .kpi-grid.four{grid-template-columns:repeat(4,1fr);}
+    .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;}
+    .kpi-card-sm{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;}
+    .kpi-num{font-size:28px;font-weight:700;color:var(--text);}
+    .kpi-num.accent{color:var(--accent);}
+    .kpi-num.success{color:var(--success);}
+    .kpi-num.warning{color:var(--warning);}
+    .kpi-num-sm{font-size:20px;font-weight:700;color:var(--text);}
+    .kpi-label{font-size:10px;color:var(--text2);text-transform:uppercase;margin-top:4px;letter-spacing:0.3px;}
+
+    .badge{display:inline-flex;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;}
+    .badge.not_started{background:rgba(245,158,11,0.15);color:var(--warning);}
+    .badge.assigned{background:rgba(139,90,246,0.15);color:#A78BFA;}
+    .badge.in_progress{background:rgba(59,130,246,0.15);color:var(--accent);}
+    .badge.pending_review{background:rgba(245,158,11,0.15);color:var(--warning);}
+    .badge.complete{background:rgba(34,197,94,0.15);color:var(--success);}
+    .badge.shipped{background:rgba(34,197,94,0.15);color:var(--success);}
+    .badge.running{background:rgba(34,197,94,0.15);color:var(--success);}
+    .badge.idle{background:rgba(139,141,151,0.15);color:var(--text2);}
+    .badge.maintenance{background:rgba(239,68,68,0.15);color:var(--danger);}
+    .badge.available{background:rgba(34,197,94,0.15);color:var(--success);}
+    .badge.off{background:rgba(139,141,151,0.15);color:var(--text2);}
+
+    .stage-label{font-size:12px;font-weight:700;padding:8px 12px;margin:12px 0 8px;border-radius:6px;}
+    .stage-label.not_started{background:rgba(245,158,11,0.08);color:var(--warning);border-left:3px solid var(--warning);}
+    .stage-label.assigned{background:rgba(139,90,246,0.08);color:#A78BFA;border-left:3px solid #A78BFA;}
+    .stage-label.in_progress{background:rgba(59,130,246,0.08);color:var(--accent);border-left:3px solid var(--accent);}
+    .stage-label.pending_review{background:rgba(245,158,11,0.08);color:var(--warning);border-left:3px solid var(--warning);}
+    .stage-label.complete{background:rgba(34,197,94,0.08);color:var(--success);border-left:3px solid var(--success);}
+    .stage-label.shipped{background:rgba(34,197,94,0.08);color:var(--success);border-left:3px solid var(--success);}
+
+    .job-row{display:flex;align-items:stretch;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:background 0.15s;overflow:hidden;}
+    .job-row:hover{background:rgba(59,130,246,0.04);}
+    .job-row-pri{width:4px;flex-shrink:0;}
+    .job-row-info{flex:1;padding:10px 12px;}
+    .job-row-top{display:flex;align-items:center;gap:8px;}
+    .job-row-num{font-size:13px;font-weight:700;}
+    .job-row-notes{font-size:11px;color:var(--text2);margin-top:3px;line-height:1.3;opacity:0.85;}
+    .job-row-meta{font-size:10px;color:var(--text2);margin-top:4px;display:flex;flex-wrap:wrap;gap:8px;}
+
+    .staff-row{display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;}
+    .staff-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:white;flex-shrink:0;}
+    .staff-info{flex:1;}
+    .staff-name{font-size:14px;font-weight:600;}
+    .staff-empid{font-size:11px;color:var(--text2);font-weight:400;}
+    .staff-meta{font-size:11px;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+
+    .machine-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;}
+    .machine-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 10px;cursor:pointer;text-align:center;transition:transform 0.2s;}
+    .machine-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.3);}
+    .machine-card.running{border-left:4px solid var(--success);}
+    .machine-card.idle{border-left:4px solid var(--text2);}
+    .machine-card.maintenance{border-left:4px solid var(--danger);}
+    .machine-card-name{font-size:13px;font-weight:700;margin-bottom:4px;}
+    .machine-card-number{font-size:10px;color:var(--text2);margin-bottom:6px;}
+    .machine-card-job{font-size:10px;color:var(--accent);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .machine-card-up{font-size:9px;color:var(--text2);margin-top:4px;}
+
+    .staff-picker{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;-webkit-overflow-scrolling:touch;}
+    .staff-picker::-webkit-scrollbar{display:none;}
+    .staff-chip{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--bg2);border:2px solid var(--border);border-radius:20px;cursor:pointer;transition:all 0.2s;}
+    .staff-chip.selected{border-color:var(--accent);background:rgba(59,130,246,0.1);}
+    .chip-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;}
+    .chip-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;}
+    .chip-meta{font-size:10px;color:var(--text2);white-space:nowrap;}
+
+    .assign-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .assign-col{background:var(--bg2);border-radius:10px;padding:12px;max-height:60vh;overflow-y:auto;}
+    .assign-col-header{font-size:12px;font-weight:700;margin-bottom:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;}
+    .assign-item{display:flex;align-items:center;justify-content:space-between;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;}
+    .assign-item-info{flex:1;min-width:0;}
+    .assign-item-num{font-size:12px;font-weight:600;}
+    .assign-item-notes{font-size:10px;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .btn-assign{padding:5px 10px;font-size:10px;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;}
+    .btn-unassign{padding:5px 10px;font-size:10px;font-weight:600;background:var(--danger);color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;}
+    .btn-reassign{padding:5px 10px;font-size:10px;font-weight:600;background:var(--warning);color:#000;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;}
+    @media(max-width:600px){.assign-split{grid-template-columns:1fr;} .kpi-grid{grid-template-columns:repeat(2,1fr);}}
+
+    .review-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:8px;}
+    .review-header{margin-bottom:10px;}
+    .review-job{font-size:14px;font-weight:600;}
+    .review-meta{font-size:11px;color:var(--text2);margin-top:3px;}
+    .review-notes{font-size:11px;color:var(--text2);margin-top:4px;line-height:1.3;opacity:0.85;}
+    .review-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+
+    .action-btn{padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+    .action-btn.success{background:var(--success);color:white;}
+    .action-btn.danger{background:var(--danger);color:white;}
+    .action-btn.primary{background:var(--accent);color:white;}
+    .action-btn.secondary{background:var(--bg3);color:var(--text);}
+    .action-btn.full{grid-column:1/-1;}
+
+    .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,17,23,0.9);z-index:200;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);}
+    .modal-overlay.active{display:flex;}
+    .modal-sheet{background:var(--bg2);border-radius:16px 16px 0 0;width:100%;max-width:500px;padding:20px;animation:slideUp 0.3s ease;}
+    @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+    .modal-handle{width:36px;height:4px;background:var(--bg3);border-radius:2px;margin:0 auto 14px;}
+    .modal-title{font-size:17px;font-weight:700;margin-bottom:4px;}
+    .modal-subtitle{font-size:12px;color:var(--text2);margin-bottom:14px;}
+    .status-options{display:flex;flex-direction:column;gap:8px;margin:14px 0;}
+    .status-option{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border:2px solid var(--border);border-radius:10px;cursor:pointer;}
+    .status-option:hover{border-color:var(--accent);}
+    .status-option.selected{border-color:var(--accent);background:rgba(59,130,246,0.05);}
+    .status-option-dot{width:12px;height:12px;border-radius:50%;}
+    .status-option-label{font-size:13px;font-weight:600;}
+
+    .empty-state{text-align:center;padding:30px 20px;color:var(--text2);font-size:13px;}
+    .loading{text-align:center;padding:40px;color:var(--text2);}
+    .spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 10px;}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--border);padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:300;opacity:0;transition:opacity 0.3s;box-shadow:0 4px 20px rgba(0,0,0,0.4);}
+    .toast.success{border-color:var(--success);}
+    .toast.error{border-color:var(--danger);}
+    .toast.warning{border-color:var(--warning);}
+    .toast.show{opacity:1;}
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-title">SVEM Command Center <span>Manager</span></div>
+    <a class="header-link" href="/x_1964226_svem_com_employee_portal.do">Employee Portal &rarr;</a>
+</div>
+
+<div class="nav-bar">
+    <button class="nav-btn active" onclick="switchTab('overview',this)">Overview</button>
+    <button class="nav-btn" onclick="switchTab('jobs',this)">Jobs</button>
+    <button class="nav-btn" onclick="switchTab('staff',this)">Staff</button>
+    <button class="nav-btn" onclick="switchTab('machines',this)">Machines</button>
+    <button class="nav-btn" onclick="switchTab('assign',this)">Assign</button>
+    <button class="nav-btn" onclick="switchTab('review',this)">Review</button>
+</div>
+
+<div class="main">
+    <div class="tab-content active" id="tab-overview"><div class="loading"><div class="spinner"></div>Loading dashboard...</div></div>
+    <div class="tab-content" id="tab-jobs"></div>
+    <div class="tab-content" id="tab-staff"></div>
+    <div class="tab-content" id="tab-machines"></div>
+    <div class="tab-content" id="tab-assign"></div>
+    <div class="tab-content" id="tab-review"></div>
+</div>
+
+<div class="modal-overlay" id="machineModal" onclick="closeModal('machineModal')">
+    <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-handle"></div>
+        <div class="modal-title" id="machineModalName"></div>
+        <div class="modal-subtitle" id="machineModalInfo"></div>
+        <div class="status-options">
+            <div class="status-option" onclick="selectMachineStatus('running',this)"><div class="status-option-dot" style="background:#22C55E"></div><div class="status-option-label">Running</div></div>
+            <div class="status-option" onclick="selectMachineStatus('idle',this)"><div class="status-option-dot" style="background:#8B8D97"></div><div class="status-option-label">Idle</div></div>
+            <div class="status-option" onclick="selectMachineStatus('maintenance',this)"><div class="status-option-dot" style="background:#EF4444"></div><div class="status-option-label">Maintenance</div></div>
+        </div>
+        <button class="action-btn primary full" onclick="saveMachineStatus()">Save</button>
+        <button class="action-btn secondary full" onclick="closeModal('machineModal')" style="margin-top:8px;">Cancel</button>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+</body>
 </html>]]></html>
         <name>dashboard</name>
         <processing_script/>
@@ -50,13 +655,13 @@ window.g_ck = "$[gs.getSession().getSessionToken() || gs.getSessionToken()]";</s
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-12 22:03:59</sys_created_on>
         <sys_id>0e2c768c52de444ebc0473281065dc49</sys_id>
-        <sys_mod_count>2</sys_mod_count>
+        <sys_mod_count>3</sys_mod_count>
         <sys_name>dashboard</sys_name>
         <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
         <sys_policy/>
         <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
         <sys_update_name>sys_ui_page_0e2c768c52de444ebc0473281065dc49</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-04-12 23:32:10</sys_updated_on>
+        <sys_updated_on>2026-04-14 07:00:00</sys_updated_on>
     </sys_ui_page>
 </record_update>
