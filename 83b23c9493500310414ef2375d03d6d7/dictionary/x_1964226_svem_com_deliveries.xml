@@ -3,10 +3,10 @@
         <element attributes="edge_encryption_enabled=true" label="Ship By Date" max_length="40" name="ship_by_date" type="glide_date"/>
         <element choice="1" default="pending" label="Delivery Status" max_length="40" name="delivery_status" type="choice">
             <choice>
-                <element inactive_on_update="false" label="Pending" sequence="0" value="pending"/>
-                <element inactive_on_update="false" label="Partial" sequence="1" value="partial"/>
-                <element inactive_on_update="false" label="Shipped" sequence="2" value="shipped"/>
                 <element inactive_on_update="false" label="Late" sequence="3" value="late"/>
+                <element inactive_on_update="false" label="Pending" sequence="0" value="pending"/>
+                <element inactive_on_update="false" label="Shipped" sequence="2" value="shipped"/>
+                <element inactive_on_update="false" label="Partial" sequence="1" value="partial"/>
             </choice>
         </element>
         <element attributes="edge_encryption_enabled=true" label="Tracking Number" max_length="50" name="tracking_number" type="string"/>
@@ -18,10 +18,10 @@
         <element attributes="edge_encryption_enabled=true" label="Need By Date" max_length="40" name="need_by_date" type="glide_date"/>
         <element choice="1" label="Carrier" max_length="40" name="carrier" type="choice">
             <choice>
-                <element inactive_on_update="false" label="Company Truck" sequence="3" value="company_truck"/>
                 <element inactive_on_update="false" label="FedEx" sequence="0" value="fedex"/>
-                <element inactive_on_update="false" label="UPS" sequence="1" value="ups"/>
                 <element inactive_on_update="false" label="Will Call" sequence="2" value="will_call"/>
+                <element inactive_on_update="false" label="UPS" sequence="1" value="ups"/>
+                <element inactive_on_update="false" label="Company Truck" sequence="3" value="company_truck"/>
             </choice>
         </element>
         <element attributes="encode_utf8=false" label="Job" mandatory="true" max_length="32" name="job" reference="x_1964226_svem_com_jobs" type="reference"/>

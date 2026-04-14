@@ -6,6 +6,7 @@
             <sys_class_name>sys_choice_set</sys_class_name>
             <sys_created_by>admin</sys_created_by>
             <sys_created_on>2026-04-12 21:56:42</sys_created_on>
+            <sys_id>acb47c9893500310414ef2375d03d680</sys_id>
             <sys_mod_count>0</sys_mod_count>
             <sys_name>job_status</sys_name>
             <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
@@ -29,6 +30,7 @@
             <sys_created_on>2026-04-12 21:56:42</sys_created_on>
             <sys_domain>global</sys_domain>
             <sys_domain_path>/</sys_domain_path>
+            <sys_id>cd5d772493140710414ef2375d03d674</sys_id>
             <sys_mod_count>0</sys_mod_count>
             <sys_updated_by>admin</sys_updated_by>
             <sys_updated_on>2026-04-12 21:56:42</sys_updated_on>
@@ -48,6 +50,7 @@
             <sys_created_on>2026-04-13 08:00:00</sys_created_on>
             <sys_domain>global</sys_domain>
             <sys_domain_path>/</sys_domain_path>
+            <sys_id>0d5d772493140710414ef2375d03d676</sys_id>
             <sys_mod_count>0</sys_mod_count>
             <sys_updated_by>admin</sys_updated_by>
             <sys_updated_on>2026-04-13 08:00:00</sys_updated_on>
@@ -67,6 +70,7 @@
             <sys_created_on>2026-04-12 21:56:42</sys_created_on>
             <sys_domain>global</sys_domain>
             <sys_domain_path>/</sys_domain_path>
+            <sys_id>c15d772493140710414ef2375d03d678</sys_id>
             <sys_mod_count>0</sys_mod_count>
             <sys_updated_by>admin</sys_updated_by>
             <sys_updated_on>2026-04-12 21:56:42</sys_updated_on>
@@ -86,6 +90,7 @@
             <sys_created_on>2026-04-13 08:00:00</sys_created_on>
             <sys_domain>global</sys_domain>
             <sys_domain_path>/</sys_domain_path>
+            <sys_id>895d772493140710414ef2375d03d679</sys_id>
             <sys_mod_count>0</sys_mod_count>
             <sys_updated_by>admin</sys_updated_by>
             <sys_updated_on>2026-04-13 08:00:00</sys_updated_on>
@@ -105,6 +110,7 @@
             <sys_created_on>2026-04-12 21:56:42</sys_created_on>
             <sys_domain>global</sys_domain>
             <sys_domain_path>/</sys_domain_path>
+            <sys_id>415d772493140710414ef2375d03d67b</sys_id>
             <sys_mod_count>0</sys_mod_count>
             <sys_updated_by>admin</sys_updated_by>
             <sys_updated_on>2026-04-12 21:56:42</sys_updated_on>
@@ -124,6 +130,7 @@
             <sys_created_on>2026-04-12 21:56:42</sys_created_on>
             <sys_domain>global</sys_domain>
             <sys_domain_path>/</sys_domain_path>
+            <sys_id>095d772493140710414ef2375d03d67c</sys_id>
             <sys_mod_count>0</sys_mod_count>
             <sys_updated_by>admin</sys_updated_by>
             <sys_updated_on>2026-04-12 21:56:42</sys_updated_on>

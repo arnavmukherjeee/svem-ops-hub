@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <before>false</before>
+        <description>Creates 10 sample jobs in the SVEM Jobs table with realistic manufacturing data. Safe to run multiple times - skips jobs that already exist by job_number.</description>
+        <name>SVEM - Load Test Job Data</name>
+        <record_for_rollback>false</record_for_rollback>
+        <script><![CDATA[// SVEM Command - Load Test Job Data
+// Creates 10 sample manufacturing jobs with varied statuses, priorities, and dates.
+// Skips any job_number that already exists to avoid duplicates.
+
+var jobs = [
+    {
+        job_number: 'JOB-1001',
+        job_status: 'not_started',
+        priority: 'high',
+        quantity_due: 500,
+        po_number: 'PO-2026-0451',
+        job_type: 'mto',
+        ship_status: 'not_shipped',
+        customer_due_date: '2026-05-01',
+        ship_by_date: '2026-04-28',
+        notes: 'Custom aluminum brackets for Tesla Fremont plant. Tight tolerance +/- 0.005in. Material already received in warehouse.'
+    },
+    {
+        job_number: 'JOB-1002',
+        job_status: 'not_started',
+        priority: 'critical',
+        quantity_due: 200,
+        po_number: 'PO-2026-0463',
+        job_type: 'mto',
+        ship_status: 'not_shipped',
+        customer_due_date: '2026-04-22',
+        ship_by_date: '2026-04-19',
+        notes: 'Emergency order - stainless steel mounting plates for SpaceX. Expedited shipping required. Customer will send truck for pickup.'
+    },
+    {
+        job_number: 'JOB-1003',
+        job_status: 'not_started',
+        priority: 'medium',
+        quantity_due: 1000,
+        po_number: 'PO-2026-0470',
+        job_type: 'mts',
+        ship_status: 'not_shipped',
+        customer_due_date: '2026-05-15',
+        ship_by_date: '2026-05-12',
+        notes: 'Standard copper bus bars for inventory replenishment. Use existing die set #47. No special packaging needed.'
+    },
+    {
+        job_number: 'JOB-1004',
+        job_status: 'not_started',
+        priority: 'high',
+        quantity_due: 150,
+        po_number: 'PO-2026-0478',
+        job_type: 'mto',
+        ship_status: 'not_shipped',
+        customer_due_date: '2026-04-30',
+        ship_by_date: '2026-04-27',
+        notes: 'Precision titanium valve housings for Boeing 787 hydraulic system. AS9100 certification required on all parts. FAI on first 5 pieces.'
+    },
+    {
+        job_number: 'JOB-1005',
+        job_status: 'not_started',
+        priority: 'low',
+        quantity_due: 2000,
+        po_number: 'PO-2026-0485',
+        job_type: 'mts',
+        ship_status: 'not_shipped',
+        customer_due_date: '2026-06-01',
+        ship_by_date: '2026-05-28',
+        notes: 'Stock replenishment - steel hex standoffs, 3/8-16 thread. Standard run, no rush. Can schedule around higher priority work.'
+    },
+    {
+        job_number: 'JOB-1006',
+        job_status: 'not_started',
+        priority: 'medium',
+        quantity_due: 300,
+        po_number: 'PO-2026-0491',
+        job_type: 'mto',
+        ship_status: 'not_shipped',
+        customer_due_date: '2026-05-10',
+        ship_by_date: '2026-05-07',
+        notes: 'Anodized aluminum heat sinks for Nvidia server racks. Black anodize Type III. Pack in anti-static bags, 25 per box.'
+    },
+    {
+        job_number: 'JOB-1007',
+        job_status: 'not_started',
+        priority: 'critical',
+        quantity_due: 50,
+        po_number: 'PO-2026-0499',
+        job_type: 'mto',
+        ship_status: 'not_shipped',
+        customer_due_date: '2026-04-18',
+        ship_by_date: '2026-04-16',
+        notes: 'URGENT - Replacement shaft couplings for Caterpillar D11 dozers. Down equipment costing customer $15K/day. Ship overnight FedEx.'
+    },
+    {
+        job_number: 'JOB-1008',
+        job_status: 'not_started',
+        priority: 'medium',
+        quantity_due: 750,
+        po_number: 'PO-2026-0502',
+        job_type: 'mts',
+        ship_status: 'not_shipped',
+        customer_due_date: '2026-05-20',
+        ship_by_date: '2026-05-17',
+        notes: 'Brass fittings for plumbing distributor. Standard catalog item #BF-125. Run on CNC lathe bank. Tumble deburr after machining.'
+    },
+    {
+        job_number: 'JOB-1009',
+        job_status: 'not_started',
+        priority: 'high',
+        quantity_due: 100,
+        po_number: 'PO-2026-0510',
+        job_type: 'mto',
+        ship_status: 'not_shipped',
+        customer_due_date: '2026-05-05',
+        ship_by_date: '2026-05-02',
+        notes: 'Inconel 718 turbine blade blanks for GE Aviation. Requires hot forging followed by 5-axis CNC finishing. CMM inspection on all parts.'
+    },
+    {
+        job_number: 'JOB-1010',
+        job_status: 'not_started',
+        priority: 'low',
+        quantity_due: 5000,
+        po_number: 'PO-2026-0518',
+        job_type: 'mts',
+        ship_status: 'not_shipped',
+        customer_due_date: '2026-06-15',
+        ship_by_date: '2026-06-12',
+        notes: 'Zinc-plated steel washers, flat and lock mix. High volume stamping run. Bulk pack in 50lb drums. Flexible on delivery date.'
+    }
+];
+
+var created = 0;
+var skipped = 0;
+
+for (var i = 0; i < jobs.length; i++) {
+    var j = jobs[i];
+
+    // Check if job already exists
+    var check = new GlideRecord('x_1964226_svem_com_jobs');
+    check.addQuery('job_number', j.job_number);
+    check.query();
+    if (check.hasNext()) {
+        skipped++;
+        gs.info('SVEM Test Data: Skipped ' + j.job_number + ' (already exists)');
+        continue;
+    }
+
+    var gr = new GlideRecord('x_1964226_svem_com_jobs');
+    gr.initialize();
+    gr.setValue('job_number', j.job_number);
+    gr.setValue('job_status', j.job_status);
+    gr.setValue('priority', j.priority);
+    gr.setValue('quantity_due', j.quantity_due);
+    gr.setValue('po_number', j.po_number);
+    gr.setValue('job_type', j.job_type);
+    gr.setValue('ship_status', j.ship_status);
+    gr.setValue('customer_due_date', j.customer_due_date);
+    gr.setValue('ship_by_date', j.ship_by_date);
+    gr.setValue('notes', j.notes);
+    gr.insert();
+    created++;
+    gs.info('SVEM Test Data: Created ' + j.job_number);
+}
+
+gs.info('SVEM Test Data: Done. Created ' + created + ', skipped ' + skipped);]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-13 12:00:00</sys_created_on>
+        <sys_id>c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>SVEM - Load Test Job Data</sys_name>
+        <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+        <sys_update_name>sys_script_fix_c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-13 12:00:00</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>
