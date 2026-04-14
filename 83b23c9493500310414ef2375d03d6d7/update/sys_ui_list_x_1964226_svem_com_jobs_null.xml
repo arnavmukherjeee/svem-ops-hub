@@ -160,7 +160,7 @@
             <sys_updated_by>admin</sys_updated_by>
             <sys_updated_on>2026-04-12 22:06:07</sys_updated_on>
             <sys_user/>
-            <view display_value="Default view" name="NULL">Default view</view>
+            <view display_value="Vista predeterminada" name="NULL">Default view</view>
             <view_name/>
         </sys_ui_list>
     </sys_ui_list>

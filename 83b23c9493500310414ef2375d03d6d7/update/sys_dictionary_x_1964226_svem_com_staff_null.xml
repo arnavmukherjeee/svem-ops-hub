@@ -27,7 +27,7 @@
         <formula/>
         <function_definition/>
         <function_field>false</function_field>
-        <internal_type display_value="Collection">collection</internal_type>
+        <internal_type display_value="Recopilación">collection</internal_type>
         <mandatory>false</mandatory>
         <max_length>40</max_length>
         <name>x_1964226_svem_com_staff</name>
@@ -47,11 +47,12 @@
         <sys_class_name>sys_dictionary</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-12 21:56:40</sys_created_on>
+        <sys_id>c8b43c9893500310414ef2375d03d667</sys_id>
         <sys_name>x_1964226_svem_com_staff</sys_name>
         <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
         <sys_policy/>
         <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
-        <sys_update_name>sys_dictionary_x_1964226_svem_com_staff_null</sys_update_name>
+        <sys_update_name>sys_dictionary_x_1964226_svem_com_staff_NULL</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2026-04-12 21:56:40</sys_updated_on>
         <table_reference>false</table_reference>

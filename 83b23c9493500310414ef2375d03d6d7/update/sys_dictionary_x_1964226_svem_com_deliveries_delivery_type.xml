@@ -27,7 +27,7 @@
         <formula/>
         <function_definition/>
         <function_field>false</function_field>
-        <internal_type display_value="Choice">choice</internal_type>
+        <internal_type display_value="Opción">choice</internal_type>
         <mandatory>false</mandatory>
         <max_length>40</max_length>
         <name>x_1964226_svem_com_deliveries</name>
@@ -47,6 +47,7 @@
         <sys_class_name>sys_dictionary</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-12 21:56:40</sys_created_on>
+        <sys_id>ccb43c9893500310414ef2375d03d632</sys_id>
         <sys_name>Delivery Type</sys_name>
         <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
         <sys_policy/>
