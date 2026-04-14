@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="assigned_to" label="Assigned To" language="en" table="x_1964226_svem_com_operations">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>assigned_to</element>
+            <help/>
+            <hint/>
+            <label>Assigned To</label>
+            <language>en</language>
+            <name>x_1964226_svem_com_operations</name>
+            <plural>Assigned Tos</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2026-04-14 07:45:14</sys_created_on>
+            <sys_id>d7f48cf493540710414ef2375d03d6b1</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Assigned To</sys_name>
+            <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+            <sys_update_name>sys_documentation_x_1964226_svem_com_operations_assigned_to_en</sys_update_name>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2026-04-14 07:45:14</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

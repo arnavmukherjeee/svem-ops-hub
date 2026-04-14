@@ -4,7 +4,7 @@
         <can_delegate>true</can_delegate>
         <description>Shop manager role with full CRUD access to jobs, operations, machines, staff, and deliveries</description>
         <elevated_privilege>false</elevated_privilege>
-        <federated_id/>
+        <federated_id>3SwFPtFCiJ/Y00P16ebrPRs8qWs2iZ4SpVdFIayrcOw=</federated_id>
         <grantable>true</grantable>
         <includes_roles/>
         <name>x_1964226_svem_com.shop_manager</name>
