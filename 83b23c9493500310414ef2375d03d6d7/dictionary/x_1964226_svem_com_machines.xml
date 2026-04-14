@@ -2,8 +2,8 @@
     <element db_object_id="50b43c9893500310414ef2375d03d6d5" label="Machines" max_length="40" name="x_1964226_svem_com_machines" type="collection">
         <element attributes="encode_utf8=false" label="Current Job" max_length="32" name="current_job" reference="x_1964226_svem_com_jobs" type="reference"/>
         <element attributes="edge_encryption_enabled=true" display="true" label="Machine Name" mandatory="true" max_length="100" name="machine_name" type="string"/>
-        <element label="Machine Number" mandatory="true" max_length="40" name="machine_number" type="integer"/>
         <element attributes="encode_utf8=false" label="Current Operation" max_length="32" name="current_operation" reference="x_1964226_svem_com_operations" type="reference"/>
+        <element label="Machine Number" mandatory="true" max_length="40" name="machine_number" type="integer"/>
         <element function_definition="glidefunction:count_queued_jobs" function_field="true" label="Jobs Queued" max_length="40" name="total_jobs_queued" read_only="true" type="integer"/>
         <element choice="1" label="Machine Type" max_length="40" name="machine_type" type="choice">
             <choice>
@@ -16,10 +16,10 @@
         <element function_definition="glidefunction:calculate_uptime_percentage" function_field="true" label="Uptime %" max_length="20" name="uptime_percentage" read_only="true" type="decimal"/>
         <element choice="1" default="idle" label="Status" max_length="40" name="status" type="choice">
             <choice>
-                <element inactive_on_update="false" label="Offline" sequence="3" value="offline"/>
                 <element inactive_on_update="false" label="Running" sequence="0" value="running"/>
-                <element inactive_on_update="false" label="Idle" sequence="1" value="idle"/>
+                <element inactive_on_update="false" label="Offline" sequence="3" value="offline"/>
                 <element inactive_on_update="false" label="Maintenance" sequence="2" value="maintenance"/>
+                <element inactive_on_update="false" label="Idle" sequence="1" value="idle"/>
             </choice>
         </element>
         <index name="index">

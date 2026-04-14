@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><record_update>
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
         <before>false</before>
         <description>Populates the Operations table with realistic manufacturing operations for all existing Jobs. Each job gets 4-6 operations in sequence through work centers. Safe to re-run (deletes existing operations first).</description>
