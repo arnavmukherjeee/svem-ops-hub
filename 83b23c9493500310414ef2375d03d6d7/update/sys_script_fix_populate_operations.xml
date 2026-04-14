@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <before>false</before>
+        <description>Populates the Operations table with realistic manufacturing operations for all existing Jobs. Each job gets 4-6 operations in sequence through work centers. Safe to re-run (deletes existing operations first).</description>
+        <name>SVEM - Populate Operations Data</name>
+        <record_for_rollback>false</record_for_rollback>
+        <script><![CDATA[// SVEM - Populate Operations Data
+// Creates realistic manufacturing operations for every job in the system.
+// Safe to re-run: clears existing operations first.
+
+(function() {
+    // Clear existing operations
+    var del = new GlideRecord('x_1964226_svem_com_operations');
+    del.deleteMultiple();
+    gs.info('SVEM: Cleared existing operations');
+
+    // Define operation templates (realistic manufacturing flow)
+    var templates = [
+        { seq: 10, process: 'Program CNC',       wc: 'programming',    setup: 0.5, run: 1.0,  est: 1.5,  lead: 0 },
+        { seq: 20, process: 'Saw Raw Stock',      wc: 'saw',            setup: 0.25, run: 0.5, est: 0.75, lead: 0 },
+        { seq: 30, process: 'Stress Relief',      wc: 'stress_relief',  setup: 0.0, run: 2.0,  est: 2.0,  lead: 1 },
+        { seq: 40, process: 'Vertical Mill',      wc: 'vmill',          setup: 1.0, run: 3.0,  est: 4.0,  lead: 0 },
+        { seq: 50, process: 'Deburr',             wc: 'deburr',         setup: 0.0, run: 0.75, est: 0.75, lead: 0 },
+        { seq: 60, process: 'QC Pre-Inspection',  wc: 'qc_pre',        setup: 0.0, run: 0.5,  est: 0.5,  lead: 0 },
+        { seq: 70, process: 'QC Final Inspection', wc: 'qc_final',     setup: 0.0, run: 1.0,  est: 1.0,  lead: 0 },
+        { seq: 80, process: 'Pack and Ship',      wc: 'pack_ship',      setup: 0.25, run: 0.5, est: 0.75, lead: 0 }
+    ];
+
+    // Some jobs get outsource step instead of stress relief
+    var altTemplates = [
+        { seq: 10, process: 'Program CNC',        wc: 'programming',   setup: 0.5, run: 1.5,  est: 2.0,  lead: 0 },
+        { seq: 20, process: 'Saw Raw Stock',       wc: 'saw',           setup: 0.25, run: 0.75, est: 1.0, lead: 0 },
+        { seq: 30, process: 'Vertical Mill Rough', wc: 'vmill',         setup: 1.5, run: 4.0,  est: 5.5,  lead: 0 },
+        { seq: 40, process: 'Outsource Coating',   wc: 'outsource',     setup: 0.0, run: 0.0,  est: 0.0,  lead: 5, sub: true },
+        { seq: 50, process: 'Vertical Mill Finish', wc: 'vmill',        setup: 0.5, run: 2.0,  est: 2.5,  lead: 0 },
+        { seq: 60, process: 'Deburr and Clean',    wc: 'deburr',        setup: 0.0, run: 1.0,  est: 1.0,  lead: 0 },
+        { seq: 70, process: 'QC Final Inspection',  wc: 'qc_final',    setup: 0.0, run: 1.5,  est: 1.5,  lead: 0 },
+        { seq: 80, process: 'Pack and Ship',        wc: 'pack_ship',    setup: 0.25, run: 0.5, est: 0.75, lead: 0 }
+    ];
+
+    // Short jobs get fewer ops
+    var shortTemplates = [
+        { seq: 10, process: 'Review Drawing',     wc: 'review',         setup: 0.0, run: 0.5,  est: 0.5,  lead: 0 },
+        { seq: 20, process: 'Saw Raw Stock',       wc: 'saw',           setup: 0.25, run: 0.5, est: 0.75, lead: 0 },
+        { seq: 30, process: 'Vertical Mill',       wc: 'vmill',         setup: 0.75, run: 2.0, est: 2.75, lead: 0 },
+        { seq: 40, process: 'QC Final Inspection',  wc: 'qc_final',    setup: 0.0, run: 0.5,  est: 0.5,  lead: 0 },
+        { seq: 50, process: 'Pack and Ship',        wc: 'pack_ship',    setup: 0.25, run: 0.5, est: 0.75, lead: 0 }
+    ];
+
+    // Status progression based on job status
+    var statusMap = {
+        'not_started': function() { return 'pending'; },
+        'assigned':    function(i, total) { return i === 0 ? 'assigned' : 'pending'; },
+        'in_progress': function(i, total) {
+            if (i < Math.floor(total * 0.3)) return 'complete';
+            if (i === Math.floor(total * 0.3)) return 'in_progress';
+            return 'pending';
+        },
+        'pending_review': function(i, total) {
+            if (i < total - 1) return 'complete';
+            return 'pending_review';
+        },
+        'complete': function() { return 'complete'; },
+        'shipped':  function() { return 'complete'; }
+    };
+
+    // Get all staff for assignment
+    var staffIds = [];
+    var sg = new GlideRecord('x_1964226_svem_com_staff');
+    sg.query();
+    while (sg.next()) {
+        staffIds.push(sg.getUniqueValue());
+    }
+
+    // Get all machines for preferred_machine
+    var machineIds = [];
+    var mg = new GlideRecord('x_1964226_svem_com_machines');
+    mg.query();
+    while (mg.next()) {
+        machineIds.push(mg.getUniqueValue());
+    }
+
+    // Process each job
+    var jobs = new GlideRecord('x_1964226_svem_com_jobs');
+    jobs.query();
+    var jobIndex = 0;
+    var totalOps = 0;
+
+    while (jobs.next()) {
+        var jobStatus = jobs.getValue('job_status') || 'not_started';
+        var jobNum = jobs.getValue('job_number') || 'UNKNOWN';
+
+        // Pick template set based on job index for variety
+        var ops;
+        if (jobIndex % 3 === 0) ops = templates;
+        else if (jobIndex % 3 === 1) ops = altTemplates;
+        else ops = shortTemplates;
+
+        var getStatus = statusMap[jobStatus] || statusMap['not_started'];
+
+        for (var i = 0; i < ops.length; i++) {
+            var t = ops[i];
+            var opStatus = getStatus(i, ops.length);
+
+            var gr = new GlideRecord('x_1964226_svem_com_operations');
+            gr.initialize();
+            gr.setValue('job', jobs.getUniqueValue());
+            gr.setValue('sequence', t.seq);
+            gr.setValue('process_name', t.process);
+            gr.setValue('description', t.process + ' for ' + jobNum);
+            gr.setValue('work_center', t.wc);
+            gr.setValue('setup_hours', t.setup);
+            gr.setValue('run_hours', t.run);
+            gr.setValue('estimated_hours', t.est);
+            gr.setValue('lead_time_days', t.lead);
+            gr.setValue('op_status', opStatus);
+
+            if (t.sub) {
+                gr.setValue('subcontract', true);
+            }
+
+            // Assign staff to in_progress or assigned ops
+            if ((opStatus === 'in_progress' || opStatus === 'assigned') && staffIds.length > 0) {
+                gr.setValue('assigned_to', staffIds[(jobIndex + i) % staffIds.length]);
+            }
+
+            // Set preferred machine for mill/saw ops
+            if ((t.wc === 'vmill' || t.wc === 'saw') && machineIds.length > 0) {
+                gr.setValue('preferred_machine', machineIds[(jobIndex + i) % machineIds.length]);
+            }
+
+            // Set dates for completed ops
+            if (opStatus === 'complete') {
+                var started = new GlideDateTime();
+                started.addDaysLocalTime(-5 + i);
+                gr.setValue('started_date', started);
+                var completed = new GlideDateTime();
+                completed.addDaysLocalTime(-4 + i);
+                gr.setValue('completed_date', completed);
+                gr.setValue('actual_hours', t.est * (0.8 + Math.random() * 0.4));
+            } else if (opStatus === 'in_progress') {
+                var started2 = new GlideDateTime();
+                started2.addDaysLocalTime(-1);
+                gr.setValue('started_date', started2);
+            }
+
+            // Add notes to some ops
+            if (i === 0 && jobIndex % 2 === 0) {
+                gr.setValue('notes', 'Priority job - expedite through shop floor');
+            }
+
+            gr.insert();
+            totalOps++;
+        }
+
+        jobIndex++;
+    }
+
+    gs.info('SVEM: Created ' + totalOps + ' operations across ' + jobIndex + ' jobs');
+})();]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-14 01:00:00</sys_created_on>
+        <sys_id>b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>SVEM - Populate Operations Data</sys_name>
+        <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+        <sys_update_name>sys_script_fix_b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-14 01:00:00</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>
