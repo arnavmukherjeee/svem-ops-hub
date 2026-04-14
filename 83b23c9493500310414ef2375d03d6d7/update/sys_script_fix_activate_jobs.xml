@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_script_fix action="INSERT_OR_UPDATE">
+        <before>false</before>
+        <description>Updates jobs to have realistic mixed statuses (some in_progress, assigned, pending_review, complete) and updates their operations accordingly. Run AFTER the Populate Operations fix script.</description>
+        <name>SVEM - Activate Jobs and Operations</name>
+        <record_for_rollback>false</record_for_rollback>
+        <script><![CDATA[// SVEM - Activate Jobs and Operations
+// Sets realistic mixed statuses on jobs and updates operation statuses to match.
+
+(function() {
+    // Define status assignments for jobs by index
+    // Mix of statuses to make the dashboard look realistic
+    var jobStatuses = [
+        'in_progress',
+        'in_progress',
+        'assigned',
+        'in_progress',
+        'pending_review',
+        'not_started',
+        'assigned',
+        'in_progress',
+        'complete',
+        'in_progress',
+        'not_started'
+    ];
+
+    // Get all staff sys_ids for assignment
+    var staffIds = [];
+    var sg = new GlideRecord('x_1964226_svem_com_staff');
+    sg.query();
+    while (sg.next()) {
+        staffIds.push(sg.getUniqueValue());
+    }
+
+    // Get all machine sys_ids
+    var machineIds = [];
+    var mg = new GlideRecord('x_1964226_svem_com_machines');
+    mg.query();
+    while (mg.next()) {
+        machineIds.push(mg.getUniqueValue());
+    }
+
+    // Update each job
+    var jobs = new GlideRecord('x_1964226_svem_com_jobs');
+    jobs.orderBy('job_number');
+    jobs.query();
+    var idx = 0;
+
+    while (jobs.next()) {
+        var newStatus = jobStatuses[idx % jobStatuses.length];
+        jobs.setValue('job_status', newStatus);
+
+        // Assign staff to active jobs
+        if (newStatus !== 'not_started' && staffIds.length > 0) {
+            jobs.setValue('assigned_to', staffIds[idx % staffIds.length]);
+        }
+
+        // Assign machine to in_progress jobs
+        if ((newStatus === 'in_progress' || newStatus === 'assigned') && machineIds.length > 0) {
+            jobs.setValue('assigned_machine', machineIds[idx % machineIds.length]);
+        }
+
+        jobs.update();
+
+        // Now update operations for this job
+        var ops = new GlideRecord('x_1964226_svem_com_operations');
+        ops.addQuery('job', jobs.getUniqueValue());
+        ops.orderBy('sequence');
+        ops.query();
+
+        var opList = [];
+        while (ops.next()) {
+            opList.push(ops.getUniqueValue());
+        }
+        var totalOps = opList.length;
+
+        for (var i = 0; i < totalOps; i++) {
+            var op = new GlideRecord('x_1964226_svem_com_operations');
+            op.get(opList[i]);
+
+            var opStatus = 'pending';
+
+            if (newStatus === 'not_started') {
+                opStatus = 'pending';
+            } else if (newStatus === 'assigned') {
+                opStatus = (i === 0) ? 'assigned' : 'pending';
+            } else if (newStatus === 'in_progress') {
+                if (i < Math.floor(totalOps * 0.4)) {
+                    opStatus = 'complete';
+                } else if (i === Math.floor(totalOps * 0.4)) {
+                    opStatus = 'in_progress';
+                } else {
+                    opStatus = 'pending';
+                }
+            } else if (newStatus === 'pending_review') {
+                if (i < totalOps - 1) {
+                    opStatus = 'complete';
+                } else {
+                    opStatus = 'pending_review';
+                }
+            } else if (newStatus === 'complete' || newStatus === 'shipped') {
+                opStatus = 'complete';
+            }
+
+            op.setValue('op_status', opStatus);
+
+            // Assign staff to active ops
+            if ((opStatus === 'in_progress' || opStatus === 'assigned') && staffIds.length > 0) {
+                op.setValue('assigned_to', staffIds[(idx + i) % staffIds.length]);
+            }
+
+            // Set dates for completed ops
+            if (opStatus === 'complete') {
+                var started = new GlideDateTime();
+                started.addDaysLocalTime(-7 + i);
+                op.setValue('started_date', started);
+                var completed = new GlideDateTime();
+                completed.addDaysLocalTime(-6 + i);
+                op.setValue('completed_date', completed);
+                var estHours = parseFloat(op.getValue('estimated_hours')) || 1;
+                op.setValue('actual_hours', (estHours * (0.85 + Math.random() * 0.3)).toFixed(2));
+            } else if (opStatus === 'in_progress') {
+                var started2 = new GlideDateTime();
+                started2.addDaysLocalTime(0);
+                op.setValue('started_date', started2);
+            }
+
+            op.update();
+        }
+
+        idx++;
+    }
+
+    // Also activate some machines
+    var mIdx = 0;
+    var machines = new GlideRecord('x_1964226_svem_com_machines');
+    machines.query();
+    while (machines.next()) {
+        // Set first 4 machines to running, rest idle/maintenance mix
+        if (mIdx < 4) {
+            machines.setValue('status', 'running');
+        } else if (mIdx % 5 === 0) {
+            machines.setValue('status', 'maintenance');
+        } else {
+            machines.setValue('status', 'idle');
+        }
+        machines.update();
+        mIdx++;
+    }
+
+    // Update staff statuses
+    var sIdx = 0;
+    var staff = new GlideRecord('x_1964226_svem_com_staff');
+    staff.query();
+    while (staff.next()) {
+        if (sIdx < 6) {
+            staff.setValue('status', 'active');
+        } else if (sIdx % 4 === 0) {
+            staff.setValue('status', 'on_break');
+        } else {
+            staff.setValue('status', 'active');
+        }
+        staff.update();
+        sIdx++;
+    }
+
+    gs.info('SVEM: Activated ' + idx + ' jobs, ' + mIdx + ' machines, ' + sIdx + ' staff with realistic statuses');
+})();]]></script>
+        <sys_class_name>sys_script_fix</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-14 01:30:00</sys_created_on>
+        <sys_id>c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>SVEM - Activate Jobs and Operations</sys_name>
+        <sys_package display_value="Svem Command" source="x_1964226_svem_com">83b23c9493500310414ef2375d03d6d7</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Svem Command">83b23c9493500310414ef2375d03d6d7</sys_scope>
+        <sys_update_name>sys_script_fix_c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-14 01:30:00</sys_updated_on>
+        <unloadable>false</unloadable>
+    </sys_script_fix>
+</record_update>
