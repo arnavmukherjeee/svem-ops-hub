@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><record_update>
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
         <before>false</before>
         <description>Replaces the broken NowSDK dashboard with a self-contained HTML/JS manager dashboard. Includes Job Tracker, Shop Floor, Operations Pipeline, Staff view, and machine status management. Safe to re-run.</description>
