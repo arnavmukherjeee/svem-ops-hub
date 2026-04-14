@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><record_update>
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
         <before>false</before>
         <description>Force-updates the SVEM manager dashboard sys_ui_page to replace the broken UX framework page with a self-contained HTML/JS dashboard. Safe to re-run.</description>

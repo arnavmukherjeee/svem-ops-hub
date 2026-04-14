@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element db_object_id="d011c47893140710414ef2375d03d6df" label="Operations" max_length="40" name="x_1964226_svem_com_operations" type="collection">
+        <element attributes="edge_encryption_enabled=true" label="Completed Date" max_length="40" name="completed_date" read_only="true" type="glide_date_time"/>
+        <element attributes="encode_utf8=false" label="Job" mandatory="true" max_length="32" name="job" reference="x_1964226_svem_com_jobs" type="reference"/>
+        <element attributes="edge_encryption_enabled=true" label="Estimated Hours" max_length="10" name="estimated_hours" type="string"/>
+        <element attributes="encode_utf8=false" label="Preferred Machine" max_length="32" name="preferred_machine" reference="x_1964226_svem_com_machines" type="reference"/>
+        <element choice="1" label="Operation Status" max_length="40" name="op_status" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="In Progress" sequence="1" value="in_progress"/>
+                <element inactive_on_update="false" label="Complete" sequence="2" value="complete"/>
+                <element inactive_on_update="false" label="Skipped" sequence="3" value="skipped"/>
+                <element inactive_on_update="false" label="Pending" sequence="0" value="pending"/>
+            </choice>
+        </element>
+        <element label="Queue Position" max_length="40" name="queue_position" read_only="true" type="integer"/>
+        <element label="Sequence" mandatory="true" max_length="40" name="sequence" type="integer"/>
+        <element attributes="edge_encryption_enabled=true" label="Actual Hours" max_length="10" name="actual_hours" read_only="true" type="string"/>
+        <element choice="1" label="Subcontract" max_length="40" name="subcontract" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="No" sequence="1" value="false"/>
+                <element inactive_on_update="false" label="Yes" sequence="0" value="true"/>
+            </choice>
+        </element>
+        <element attributes="encode_utf8=false" label="Completed By" max_length="32" name="completed_by" reference="sys_user" type="reference"/>
+        <element choice="1" label="Work Center" max_length="40" name="work_center" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Stress Relief" sequence="1" value="stress_relief"/>
+                <element inactive_on_update="false" label="Deburr" sequence="5" value="deburr"/>
+                <element inactive_on_update="false" label="Pack/Ship" sequence="9" value="pack_ship"/>
+                <element inactive_on_update="false" label="Saw" sequence="2" value="saw"/>
+                <element inactive_on_update="false" label="QcPre" sequence="6" value="qc_pre"/>
+                <element inactive_on_update="false" label="Programming" sequence="3" value="programming"/>
+                <element inactive_on_update="false" label="Outsource" sequence="7" value="outsource"/>
+                <element inactive_on_update="false" label="Review" sequence="0" value="review"/>
+                <element inactive_on_update="false" label="Vmill" sequence="4" value="vmill"/>
+                <element inactive_on_update="false" label="QcFinal" sequence="8" value="qc_final"/>
+            </choice>
+        </element>
+        <element attributes="edge_encryption_enabled=true" label="Description" max_length="255" name="description" type="string"/>
+        <element attributes="edge_encryption_enabled=true" label="Operation ID" max_length="30" name="op_id" read_only="true" type="string"/>
+        <element attributes="edge_encryption_enabled=true" label="Process Name" max_length="100" name="process_name" type="string"/>
+        <element attributes="edge_encryption_enabled=true" label="Started Date" max_length="40" name="started_date" read_only="true" type="glide_date_time"/>
+        <index name="index">
+            <element name="completed_by"/>
+        </index>
+        <index name="index2">
+            <element name="job"/>
+        </index>
+        <index name="index3">
+            <element name="preferred_machine"/>
+        </index>
+    </element>
+</database>

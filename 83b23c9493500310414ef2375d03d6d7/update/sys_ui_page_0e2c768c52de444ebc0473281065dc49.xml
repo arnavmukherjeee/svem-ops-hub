@@ -455,199 +455,45 @@ window.onload = function(){
         <description>SVEM Command Center - Manufacturing Dashboard</description>
         <direct>true</direct>
         <endpoint>x_1964226_svem_com_dashboard.do</endpoint>
-        <html><![CDATA[<html>
-<head>
-    <title>SVEM Command Center</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script>window.g_ck = "$[gs.getSession().getSessionToken() || gs.getSessionToken()]";</script>
+        <html><![CDATA[
+<!-- @fluent-import-html WARNING: This file was imported from the output of a static build. Modifications of any kind are likely to result in unintended behavior. In most cases, you should edit the source file of the HTML imported below. If you are absolutely certain you want to take control of this HTML, you can remove this comment to prevent the SDK from regenerating it. However, you will then be responsible for the management of this HTML in your Fluent file. -->
+<html>
+  <head>
+    <title>SVEM Command Center Dashboard</title>
+    <!-- @sdk:now-ux-globals -->
+    <!-- Resolved from sdk:now-ux-globals tag at NowSDK build time to support earlier Glide releases -->
+    <script>window.NOW = {};
+window.NOW.user = {};
+window.NOW.batch_glide_ajax_requests = false;
+window.NOW.isUsingPolaris = true;
+window.NOW.exclude_dark_theme = "false";
+window.g_ck = "$[gs.getSession().getSessionToken() || gs.getSessionToken()]";</script>
+    <!-- Include ServiceNow's required scripts -->
+    <g:requires name="scripts/doctype/functions_bootstrap14.js"></g:requires>
+    <g:requires name="scripts/lib/prototype.js"></g:requires>
+    <g:requires name="scripts/classes/ajax/GlideURL.js"></g:requires>
+    <g:requires name="scripts/doctype/CustomEventManager.js"></g:requires>
+    <g:requires name="scripts/classes/ajax/GlideAjax.js"></g:requires>
+    <g:requires name="scripts/classes/GlideUser.js"></g:requires>
     <g2:client_script type="user"></g2:client_script>
-    <style>
-    *{margin:0;padding:0;box-sizing:border-box;}
-    :root{--bg:#0F1117;--bg2:#1A1D27;--bg3:#2A2D3A;--border:#2A2D3A;--text:#E8E9ED;--text2:#8B8D97;--accent:#3B82F6;--success:#22C55E;--warning:#F59E0B;--danger:#EF4444;}
-    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;}
-
-    .header{height:52px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;position:fixed;top:0;left:0;right:0;z-index:100;}
-    .header-title{font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:10px;}
-    .header-title span{font-size:11px;color:var(--accent);font-weight:500;background:rgba(59,130,246,0.12);padding:3px 8px;border-radius:4px;}
-    .header-link{font-size:12px;color:var(--accent);text-decoration:none;font-weight:500;}
-
-    .nav-bar{height:44px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:stretch;gap:0;position:fixed;top:52px;left:0;right:0;z-index:99;overflow-x:auto;}
-    .nav-bar::-webkit-scrollbar{display:none;}
-    .nav-btn{background:none;border:none;color:var(--text2);font-size:12px;font-weight:600;padding:0 18px;cursor:pointer;position:relative;white-space:nowrap;transition:color 0.15s;}
-    .nav-btn:hover{color:var(--text);}
-    .nav-btn.active{color:var(--accent);}
-    .nav-btn.active::after{content:'';position:absolute;bottom:0;left:8px;right:8px;height:2px;background:var(--accent);border-radius:2px 2px 0 0;}
-
-    .main{position:fixed;top:96px;bottom:0;left:0;right:0;overflow-y:auto;-webkit-overflow-scrolling:touch;}
-    .tab-content{display:none;padding:20px;max-width:900px;margin:0 auto;}
-    .tab-content.active{display:block;}
-
-    .section-header{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:18px 0 10px;}
-    .section-header:first-child{margin-top:0;}
-
-    .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
-    .kpi-grid.two{grid-template-columns:repeat(2,1fr);}
-    .kpi-grid.four{grid-template-columns:repeat(4,1fr);}
-    .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;}
-    .kpi-card-sm{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;}
-    .kpi-num{font-size:28px;font-weight:700;color:var(--text);}
-    .kpi-num.accent{color:var(--accent);}
-    .kpi-num.success{color:var(--success);}
-    .kpi-num.warning{color:var(--warning);}
-    .kpi-num-sm{font-size:20px;font-weight:700;color:var(--text);}
-    .kpi-label{font-size:10px;color:var(--text2);text-transform:uppercase;margin-top:4px;letter-spacing:0.3px;}
-
-    .badge{display:inline-flex;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;}
-    .badge.not_started{background:rgba(245,158,11,0.15);color:var(--warning);}
-    .badge.assigned{background:rgba(139,90,246,0.15);color:#A78BFA;}
-    .badge.in_progress{background:rgba(59,130,246,0.15);color:var(--accent);}
-    .badge.pending_review{background:rgba(245,158,11,0.15);color:var(--warning);}
-    .badge.complete{background:rgba(34,197,94,0.15);color:var(--success);}
-    .badge.shipped{background:rgba(34,197,94,0.15);color:var(--success);}
-    .badge.running{background:rgba(34,197,94,0.15);color:var(--success);}
-    .badge.idle{background:rgba(139,141,151,0.15);color:var(--text2);}
-    .badge.maintenance{background:rgba(239,68,68,0.15);color:var(--danger);}
-    .badge.available{background:rgba(34,197,94,0.15);color:var(--success);}
-    .badge.off{background:rgba(139,141,151,0.15);color:var(--text2);}
-
-    .stage-label{font-size:12px;font-weight:700;padding:8px 12px;margin:12px 0 8px;border-radius:6px;}
-    .stage-label.not_started{background:rgba(245,158,11,0.08);color:var(--warning);border-left:3px solid var(--warning);}
-    .stage-label.assigned{background:rgba(139,90,246,0.08);color:#A78BFA;border-left:3px solid #A78BFA;}
-    .stage-label.in_progress{background:rgba(59,130,246,0.08);color:var(--accent);border-left:3px solid var(--accent);}
-    .stage-label.pending_review{background:rgba(245,158,11,0.08);color:var(--warning);border-left:3px solid var(--warning);}
-    .stage-label.complete{background:rgba(34,197,94,0.08);color:var(--success);border-left:3px solid var(--success);}
-    .stage-label.shipped{background:rgba(34,197,94,0.08);color:var(--success);border-left:3px solid var(--success);}
-
-    .job-row{display:flex;align-items:stretch;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:background 0.15s;overflow:hidden;}
-    .job-row:hover{background:rgba(59,130,246,0.04);}
-    .job-row-pri{width:4px;flex-shrink:0;}
-    .job-row-info{flex:1;padding:10px 12px;}
-    .job-row-top{display:flex;align-items:center;gap:8px;}
-    .job-row-num{font-size:13px;font-weight:700;}
-    .job-row-notes{font-size:11px;color:var(--text2);margin-top:3px;line-height:1.3;opacity:0.85;}
-    .job-row-meta{font-size:10px;color:var(--text2);margin-top:4px;display:flex;flex-wrap:wrap;gap:8px;}
-
-    .staff-row{display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;}
-    .staff-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:white;flex-shrink:0;}
-    .staff-info{flex:1;}
-    .staff-name{font-size:14px;font-weight:600;}
-    .staff-empid{font-size:11px;color:var(--text2);font-weight:400;}
-    .staff-meta{font-size:11px;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
-
-    .machine-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;}
-    .machine-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 10px;cursor:pointer;text-align:center;transition:transform 0.2s;}
-    .machine-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.3);}
-    .machine-card.running{border-left:4px solid var(--success);}
-    .machine-card.idle{border-left:4px solid var(--text2);}
-    .machine-card.maintenance{border-left:4px solid var(--danger);}
-    .machine-card-name{font-size:13px;font-weight:700;margin-bottom:4px;}
-    .machine-card-number{font-size:10px;color:var(--text2);margin-bottom:6px;}
-    .machine-card-job{font-size:10px;color:var(--accent);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-    .machine-card-up{font-size:9px;color:var(--text2);margin-top:4px;}
-
-    .staff-picker{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;-webkit-overflow-scrolling:touch;}
-    .staff-picker::-webkit-scrollbar{display:none;}
-    .staff-chip{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--bg2);border:2px solid var(--border);border-radius:20px;cursor:pointer;transition:all 0.2s;}
-    .staff-chip.selected{border-color:var(--accent);background:rgba(59,130,246,0.1);}
-    .chip-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;}
-    .chip-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;}
-    .chip-meta{font-size:10px;color:var(--text2);white-space:nowrap;}
-
-    .assign-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-    .assign-col{background:var(--bg2);border-radius:10px;padding:12px;max-height:60vh;overflow-y:auto;}
-    .assign-col-header{font-size:12px;font-weight:700;margin-bottom:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;}
-    .assign-item{display:flex;align-items:center;justify-content:space-between;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;}
-    .assign-item-info{flex:1;min-width:0;}
-    .assign-item-num{font-size:12px;font-weight:600;}
-    .assign-item-notes{font-size:10px;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-    .btn-assign{padding:5px 10px;font-size:10px;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;}
-    .btn-unassign{padding:5px 10px;font-size:10px;font-weight:600;background:var(--danger);color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;}
-    .btn-reassign{padding:5px 10px;font-size:10px;font-weight:600;background:var(--warning);color:#000;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;}
-    @media(max-width:600px){.assign-split{grid-template-columns:1fr;} .kpi-grid{grid-template-columns:repeat(2,1fr);}}
-
-    .review-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:8px;}
-    .review-header{margin-bottom:10px;}
-    .review-job{font-size:14px;font-weight:600;}
-    .review-meta{font-size:11px;color:var(--text2);margin-top:3px;}
-    .review-notes{font-size:11px;color:var(--text2);margin-top:4px;line-height:1.3;opacity:0.85;}
-    .review-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-
-    .action-btn{padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
-    .action-btn.success{background:var(--success);color:white;}
-    .action-btn.danger{background:var(--danger);color:white;}
-    .action-btn.primary{background:var(--accent);color:white;}
-    .action-btn.secondary{background:var(--bg3);color:var(--text);}
-    .action-btn.full{grid-column:1/-1;}
-
-    .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,17,23,0.9);z-index:200;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);}
-    .modal-overlay.active{display:flex;}
-    .modal-sheet{background:var(--bg2);border-radius:16px 16px 0 0;width:100%;max-width:500px;padding:20px;animation:slideUp 0.3s ease;}
-    @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-    .modal-handle{width:36px;height:4px;background:var(--bg3);border-radius:2px;margin:0 auto 14px;}
-    .modal-title{font-size:17px;font-weight:700;margin-bottom:4px;}
-    .modal-subtitle{font-size:12px;color:var(--text2);margin-bottom:14px;}
-    .status-options{display:flex;flex-direction:column;gap:8px;margin:14px 0;}
-    .status-option{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border:2px solid var(--border);border-radius:10px;cursor:pointer;}
-    .status-option:hover{border-color:var(--accent);}
-    .status-option.selected{border-color:var(--accent);background:rgba(59,130,246,0.05);}
-    .status-option-dot{width:12px;height:12px;border-radius:50%;}
-    .status-option-label{font-size:13px;font-weight:600;}
-
-    .empty-state{text-align:center;padding:30px 20px;color:var(--text2);font-size:13px;}
-    .loading{text-align:center;padding:40px;color:var(--text2);}
-    .spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 10px;}
-    @keyframes spin{to{transform:rotate(360deg)}}
-
-    .toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--border);padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:300;opacity:0;transition:opacity 0.3s;box-shadow:0 4px 20px rgba(0,0,0,0.4);}
-    .toast.success{border-color:var(--success);}
-    .toast.error{border-color:var(--danger);}
-    .toast.warning{border-color:var(--warning);}
-    .toast.show{opacity:1;}
-    </style>
-</head>
-<body>
-
-<div class="header">
-    <div class="header-title">SVEM Command Center <span>Manager</span></div>
-    <a class="header-link" href="/x_1964226_svem_com_employee_portal.do">Employee Portal &rarr;</a>
-</div>
-
-<div class="nav-bar">
-    <button class="nav-btn active" onclick="switchTab('overview',this)">Overview</button>
-    <button class="nav-btn" onclick="switchTab('jobs',this)">Jobs</button>
-    <button class="nav-btn" onclick="switchTab('staff',this)">Staff</button>
-    <button class="nav-btn" onclick="switchTab('machines',this)">Machines</button>
-    <button class="nav-btn" onclick="switchTab('assign',this)">Assign</button>
-    <button class="nav-btn" onclick="switchTab('review',this)">Review</button>
-</div>
-
-<div class="main">
-    <div class="tab-content active" id="tab-overview"><div class="loading"><div class="spinner"></div>Loading dashboard...</div></div>
-    <div class="tab-content" id="tab-jobs"></div>
-    <div class="tab-content" id="tab-staff"></div>
-    <div class="tab-content" id="tab-machines"></div>
-    <div class="tab-content" id="tab-assign"></div>
-    <div class="tab-content" id="tab-review"></div>
-</div>
-
-<div class="modal-overlay" id="machineModal" onclick="closeModal('machineModal')">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
-        <div class="modal-handle"></div>
-        <div class="modal-title" id="machineModalName"></div>
-        <div class="modal-subtitle" id="machineModalInfo"></div>
-        <div class="status-options">
-            <div class="status-option" onclick="selectMachineStatus('running',this)"><div class="status-option-dot" style="background:#22C55E"></div><div class="status-option-label">Running</div></div>
-            <div class="status-option" onclick="selectMachineStatus('idle',this)"><div class="status-option-dot" style="background:#8B8D97"></div><div class="status-option-label">Idle</div></div>
-            <div class="status-option" onclick="selectMachineStatus('maintenance',this)"><div class="status-option-dot" style="background:#EF4444"></div><div class="status-option-label">Maintenance</div></div>
-        </div>
-        <button class="action-btn primary full" onclick="saveMachineStatus()">Save</button>
-        <button class="action-btn secondary full" onclick="closeModal('machineModal')" style="margin-top:8px;">Cancel</button>
-    </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-</body>
+    <link rel="preload" href="/uxasset/set-cache-buster/$[UxFrameworkScriptables.getFlushTimestamp()].js" as="script"></link>
+    <g:requires name="scripts/polaris_theme_refresh_observer.js"></g:requires>
+    <link data-source-id="glide-theme" id="polarisberg_theme_variables" rel="stylesheet" href="/$uxappimmutables.do?sysparm_request_type=ux_theme$[AMP]sysparm_app_sys_id=c86a62e2c7022010099a308dc7c26022$[AMP]uxpcb=$[sn_ui.PolarisUI.getThemeVariableCssCacheKey()]"></link>
+    <script type="module" src="/uxasset/externals/@devsnc/library-uxf/index.jsdbx"></script>
+    <!-- @sdk:now-ux-globals -->
+    <script src="/uxasset/externals/x_1964226_svem_com/main.jsdbx?uxpcb=$[UxFrameworkScriptables.getFlushTimestamp()]" type="module"></script>
+    <style>/* Remove all default margins/padding for true edge-to-edge */
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #0F1117;
+      height: 100vh;
+      overflow: hidden;
+    }</style>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>]]></html>
         <name>dashboard</name>
         <processing_script/>
